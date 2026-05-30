@@ -97,6 +97,11 @@ _section "3. Clean dist/"
 rm -rf dist/ build/ cross_st.egg-info/
 _ok "Stale artefacts removed"
 
+# ── 3b. Build st-ask corpus (ASK-3) ───────────────────────────────────────────
+_section "3b. Build st-ask corpus"
+$PYTHON script/build_ask_corpus.py
+_ok "support_content.md regenerated and stamped"
+
 # ── 4. Build ──────────────────────────────────────────────────────────────────
 _section "4. Build sdist + wheel"
 $PYTHON -m build

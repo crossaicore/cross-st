@@ -59,6 +59,7 @@ dependencies = [
     "weasyprint>=68.0",          # st-print — high-quality Markdown → PDF
     # Environment and utilities
     "python-dotenv>=1.1.0",
+    "pyyaml>=6.0",                # st-ask FAQ corpus parser (Phase 1)
     "setuptools>=78.1.1",         # CVE-2025-47273
     "urllib3>=2.6.3",             # CVE-2025-50181/50182 etc.
 ]
@@ -163,4 +164,6 @@ cross_st = [
     "cross_stones/domains/*.prompt",
     "cross_stones/*.json",
     "data/*.txt",
+    "data/*.md",                  # st-ask FAQ + LLM corpus (Phase 1)
+    "data/*.json",                # tos_versions.json + future structured data
 ]
