@@ -13,3 +13,34 @@ from cross_ai_core.ai_error_handler import (   # explicit for IDE / type checker
     RateLimitError,
     TransientError,
 )
+
+def write_error_breadcrumb(exception, script):
+    """
+    Appends a scrubbed error breadcrumb to ~/.cross_api_cache/last_error.json (max 5 entries).
+    """
+    import os, json, time
+    try:
+        from cross_st._ask_scrub import scrub
+    except ImportError:
+        # fallback: no scrubbing
+        def scrub(x): return x
+    CACHE_DIR = os.path.expanduser("~/.cross_api_cache")
+    LAST_ERROR = os.path.join(CACHE_DIR, "last_error.json")
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    try:
+        with open(LAST_ERROR, "r") as f:
+            data = json.load(f)
+    except Exception:
+        data = []
+    if not isinstance(data, list):
+        data = []
+    entry = {
+        "ts": int(time.time()),
+        "exception_type": type(exception).__name__,
+        "message": scrub(str(exception)),
+        "script": script,
+    }
+    data.append(entry)
+    data = data[-5:]
+    with open(LAST_ERROR, "w") as f:
+        json.dump(data, f, indent=2)

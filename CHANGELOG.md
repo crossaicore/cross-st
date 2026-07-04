@@ -9,6 +9,21 @@ Cross uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **`st-ask` — local help assistant** (new 30th entry point). Runs in two
+  tiers: **Pseudo-AI** (no API key — deterministic FAQ matcher over
+  `support_faq.md`) and **Full LLM** (≥ 1 key — routes your question to
+  `DEFAULT_AGENT`/`ASK_AGENT`/`--agent` with the `support_content.md` corpus
+  as system prompt, citing only from the reference and ending every answer
+  with a `See also:` block). One-shot (`st-ask "…"`) or bare REPL.
+  `--explain-last-error` reads the scrubbed error breadcrumb from
+  `~/.cross_api_cache/last_error.json` and explains it. `--pseudo` forces the
+  local tier even when a key is present.
+- Error breadcrumbs: `ai_error_handler.write_error_breadcrumb()` records the
+  last 5 errors (path/secret-scrubbed at write time) for `--explain-last-error`.
+- Runtime deps `scikit-learn>=1.0.0` + `rapidfuzz>=3.0.0` (Pseudo-AI matcher;
+  auto-installed on first use).
+
 ---
 
 ## [0.11.0] — 2026-05-10  *(AGT-9 alias → agent cleanup)*

@@ -25,6 +25,7 @@ def _run(name: str) -> None:
 def st():           _run("st")
 def st_admin():     _run("st-admin")
 def st_analyze():   _run("st-analyze")
+def st_ask():       _run("st-ask")
 def st_bang():      _run("st-bang")
 def st_cat():       _run("st-cat")
 def st_cross():     _run("st-cross")

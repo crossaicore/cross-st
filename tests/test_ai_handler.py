@@ -52,24 +52,52 @@ class TestGetDefaultAI:
         assert get_default_ai() in get_ai_list()
 
     def test_env_override_valid(self):
-        with patch.dict(os.environ, {"DEFAULT_AI": "anthropic"}):
-            assert get_default_ai() == "anthropic"
+        # Post-AGT-1: DEFAULT_AGENT outranks DEFAULT_AI and must be cleared
+        # for the legacy env var to be exercised. The value also has to be
+        # a *registered agent name*, which on a real machine may not equal
+        # the provider name — pick the first registered agent instead.
+        from cross_ai_core.agents import get_agents
+        agents = list(get_agents())
+        if not agents:
+            pytest.skip("no agents registered in this environment")
+        target = agents[0]
+        env = {k: v for k, v in os.environ.items() if k not in ("DEFAULT_AGENT", "DEFAULT_AI")}
+        env["DEFAULT_AI"] = target
+        with patch.dict(os.environ, env, clear=True):
+            assert get_default_ai() == target
 
     def test_env_override_all_providers(self):
-        for provider in get_ai_list():
-            with patch.dict(os.environ, {"DEFAULT_AI": provider}):
-                assert get_default_ai() == provider
+        from cross_ai_core.agents import get_agents
+        agents = list(get_agents())
+        if not agents:
+            pytest.skip("no agents registered in this environment")
+        for agent_name in agents:
+            env = {k: v for k, v in os.environ.items() if k not in ("DEFAULT_AGENT", "DEFAULT_AI")}
+            env["DEFAULT_AI"] = agent_name
+            with patch.dict(os.environ, env, clear=True):
+                assert get_default_ai() == agent_name
 
     def test_invalid_env_falls_back_to_first(self):
-        with patch.dict(os.environ, {"DEFAULT_AI": "not_a_real_ai"}):
+        # Post-AGT-1: fallback is next(iter(agents)), not AI_LIST[0].
+        from cross_ai_core.agents import get_agents
+        agents = list(get_agents())
+        if not agents:
+            pytest.skip("no agents registered in this environment")
+        env = {k: v for k, v in os.environ.items() if k not in ("DEFAULT_AGENT", "DEFAULT_AI")}
+        env["DEFAULT_AI"] = "not_a_real_ai"
+        with patch.dict(os.environ, env, clear=True):
             result = get_default_ai()
-        assert result == AI_LIST[0]
+        assert result == agents[0]
 
     def test_empty_env_uses_first(self):
-        env_clean = {k: v for k, v in os.environ.items() if k != "DEFAULT_AI"}
+        from cross_ai_core.agents import get_agents
+        agents = list(get_agents())
+        if not agents:
+            pytest.skip("no agents registered in this environment")
+        env_clean = {k: v for k, v in os.environ.items() if k not in ("DEFAULT_AI", "DEFAULT_AGENT")}
         with patch.dict(os.environ, env_clean, clear=True):
             result = get_default_ai()
-        assert result == AI_LIST[0]
+        assert result == agents[0]
 
 
 # ── get_ai_model ──────────────────────────────────────────────────────────────

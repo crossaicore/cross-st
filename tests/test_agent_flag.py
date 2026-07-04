@@ -60,6 +60,7 @@ _SCRIPTS_DIR = _ROOT / "cross_st"
 # These are the scripts that accept a single agent/model choice from the user.
 SCRIPTS_WITH_AGENT_FLAG = [
     "st-analyze",
+    "st-ask",
     "st-bang",
     "st-domain",
     "st-fact",
