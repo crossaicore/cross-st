@@ -197,6 +197,59 @@ class EnvLoadTests(unittest.TestCase):
         self.assertTrue(called["v"], "main() must call load_cross_env()")
 
 
+class PseudoOneShotTests(unittest.TestCase):
+    """Regression: `st-ask --pseudo "<question>"` must answer once and return,
+    not fall into the REPL (ASK-5 one-shot applies to both tiers)."""
+
+    def setUp(self):
+        self.m = _load_st_ask()
+        self.m.mmd_startup.load_cross_env = lambda: None
+
+    def _run(self, argv, expect_input_unused=True):
+        import builtins
+        input_calls = {"n": 0}
+
+        def guard_input(*a, **k):
+            input_calls["n"] += 1
+            raise EOFError  # if the REPL is entered, exit immediately
+
+        # Capture the query the matcher receives.
+        seen = {}
+        real_find = self.m.find_matches
+
+        def spy_find(query, faq, top_k=3):
+            seen["query"] = query
+            return real_find(query, faq, top_k=top_k)
+
+        self.m.find_matches = spy_find
+        old_argv, old_input = sys.argv, builtins.input
+        sys.argv = argv
+        builtins.input = guard_input
+        buf = io.StringIO()
+        try:
+            with redirect_stdout(buf):
+                rc = self.m.main()
+        finally:
+            sys.argv, builtins.input = old_argv, old_input
+            self.m.find_matches = real_find
+        if expect_input_unused:
+            self.assertEqual(input_calls["n"], 0, "one-shot must not enter REPL")
+        return rc, buf.getvalue(), seen
+
+    def test_pseudo_one_shot_answers_and_returns(self):
+        rc, out, seen = self._run(
+            ["st-ask", "--pseudo", "how", "do", "I", "install", "cross-st?"]
+        )
+        self.assertEqual(rc, 0)
+        self.assertEqual(seen["query"], "how do I install cross-st?")
+        self.assertIn("local lookup", out)
+
+    def test_pseudo_repl_still_entered_without_question(self):
+        # No question → REPL banner shown, input() consulted (then EOF).
+        rc, out, _ = self._run(["st-ask", "--pseudo"], expect_input_unused=False)
+        self.assertIn("Local FAQ help", out)
+
+
 if __name__ == "__main__":
     unittest.main()
 

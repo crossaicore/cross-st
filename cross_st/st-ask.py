@@ -151,6 +151,19 @@ def _explain_last_error(agent, system_prompt):
     )
     _llm_answer(agent, prompt, system_prompt)
 
+def _pseudo_answer(query):
+    """Render a Pseudo-AI (local lookup) answer for a single query."""
+    matches = find_matches(query, _FAQ, top_k=3)
+    if matches and matches[0]['_score'] > 0.6:
+        _print_answer(matches[0])
+    elif matches and matches[0]['_score'] > 0.3:
+        print("\nDid you mean:")
+        for m in matches:
+            print(f"  - {m['question']}")
+        print(f"\n{FOOTER}")
+    else:
+        _print_no_match()
+
 def main():
     # Load ~/.crossenv + project .env layers so API keys and DEFAULT_AGENT are
     # visible. st-ask deliberately bypasses require_config() (like st-admin /
@@ -198,6 +211,10 @@ def main():
             if not q or q in (":quit", ":exit"): break
             _llm_answer(agent, q, system_prompt)
         return 0
+    # Pseudo-AI tier
+    if args.question:
+        _pseudo_answer(" ".join(args.question))
+        return 0
     # REPL
     print("st-ask: Local FAQ help. Type your question, or :quit to exit.")
     while True:
@@ -207,16 +224,8 @@ def main():
             print()
             break
         if not q or q in (":quit", ":exit"): break
-        matches = find_matches(q, _FAQ, top_k=3)
-        if matches and matches[0]['_score'] > 0.6:
-            _print_answer(matches[0])
-        elif matches and matches[0]['_score'] > 0.3:
-            print("\nDid you mean:")
-            for m in matches:
-                print(f"  - {m['question']}")
-            print(f"\n{FOOTER}")
-        else:
-            _print_no_match()
+        _pseudo_answer(q)
+    return 0
 
 if __name__ == "__main__":
     sys.exit(main())
