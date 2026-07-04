@@ -9,6 +9,8 @@ from cross_st._ask_match import find_matches
 from cross_st._ask_scrub import scrub
 from cross_st import ai_handler
 from cross_st import ai_error_handler
+from cross_st import mmd_startup
+
 
 # ── Escape-hatch links (shown on every Full-LLM answer, per st-ask.md §1) ──
 _WIKI_BASE = "https://github.com/crossaicore/cross-st/wiki"
@@ -150,6 +152,11 @@ def _explain_last_error(agent, system_prompt):
     _llm_answer(agent, prompt, system_prompt)
 
 def main():
+    # Load ~/.crossenv + project .env layers so API keys and DEFAULT_AGENT are
+    # visible. st-ask deliberately bypasses require_config() (like st-admin /
+    # st-man) so it can run before setup — but it still must load the env
+    # layers to decide between the Pseudo-AI and Full-LLM tiers.
+    mmd_startup.load_cross_env()
     parser = argparse.ArgumentParser()
     parser.add_argument("question", nargs="*", help="Ask a question")
     parser.add_argument("--agent", help="Agent name to use for LLM tier")

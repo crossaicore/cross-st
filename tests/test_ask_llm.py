@@ -9,6 +9,7 @@ import importlib.util
 import io
 import json
 import os
+import sys
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -163,6 +164,37 @@ class SelectAgentTests(unittest.TestCase):
             self.assertEqual(self.m._select_agent(Args()), "env-agent")
         finally:
             del os.environ["ASK_AGENT"]
+
+
+class EnvLoadTests(unittest.TestCase):
+    """Regression: main() must load ~/.crossenv before deciding the tier,
+    otherwise keys stored there are invisible and st-ask wrongly falls back
+    to Pseudo-AI (bug reported 2026-07-04)."""
+
+    def setUp(self):
+        self.m = _load_st_ask()
+
+    def test_main_loads_cross_env_before_tier_decision(self):
+        import builtins
+        called = {"v": False}
+
+        def fake_load():
+            called["v"] = True
+
+        def eof_input(*a, **k):
+            raise EOFError
+
+        self.m.mmd_startup.load_cross_env = fake_load
+        old_argv, old_input = sys.argv, builtins.input
+        sys.argv = ["st-ask", "--pseudo"]   # pseudo REPL; EOF exits at once
+        builtins.input = eof_input
+        buf = io.StringIO()
+        try:
+            with redirect_stdout(buf):
+                self.m.main()
+        finally:
+            sys.argv, builtins.input = old_argv, old_input
+        self.assertTrue(called["v"], "main() must call load_cross_env()")
 
 
 if __name__ == "__main__":
