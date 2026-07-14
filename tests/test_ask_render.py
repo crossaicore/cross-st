@@ -121,7 +121,7 @@ class SeeAlsoLinkTests(unittest.TestCase):
         # fragments are present as visible text.
         import re
         visible = re.sub(r"\x1b\[[0-9;]*m", "", buf.getvalue())
-        self.assertIn("crossai.dev/c/help", visible)
+        self.assertIn("crossai.dev", visible)
         self.assertIn("Community", visible)
 
 

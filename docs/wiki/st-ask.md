@@ -25,8 +25,8 @@ For clickable links, see [Terminal Setup](Terminal-Setup) (macOS: `brew install 
 - Redacts secrets/paths in error breadcrumbs
 
 ## Escape Hatches
-- [GitHub Discussions](https://github.com/crossaicore/cross-st/discussions)
-- [Cross Community](https://crossai.dev/community)
+- [Cross Community (Discourse)](https://crossai.dev)
+- [GitHub Issues](https://github.com/crossaicore/cross-st/issues)
 
 ---
 

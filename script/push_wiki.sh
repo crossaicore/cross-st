@@ -2,8 +2,8 @@
 # script/push_wiki.sh — Push docs/wiki/ pages to the GitHub Wiki repo.
 #
 # The GitHub Wiki is a separate git repo at:
-#   https://github.com/b202i/cross.wiki.git   (HTTPS — needs credential helper)
-#   git@github.com:b202i/cross.wiki.git        (SSH   — preferred; set WIKI_SSH=1)
+#   https://github.com/crossaicore/cross-st.wiki.git   (HTTPS — needs credential helper)
+#   git@github.com:crossaicore/cross-st.wiki.git        (SSH   — preferred; set WIKI_SSH=1)
 #
 # This script:
 #   1. Clones (or pulls) the wiki repo into /tmp/cross-wiki/
@@ -17,14 +17,14 @@
 #
 # First-time setup — GitHub creates the wiki repo lazily.  Before running this
 # script on a fresh repo you must initialise it once via the GitHub UI:
-#   1. Go to https://github.com/b202i/cross/wiki
+#   1. Go to https://github.com/crossaicore/cross-st/wiki
 #   2. Click "Create the first page", save with any content
 #   3. Then re-run this script — it will overwrite that placeholder page
 
 set -euo pipefail
 
-WIKI_HTTPS="https://github.com/b202i/cross-st.wiki.git"
-WIKI_SSH_URL="git@github.com:b202i/cross-st.wiki.git"
+WIKI_HTTPS="https://github.com/crossaicore/cross-st.wiki.git"
+WIKI_SSH_URL="git@github.com:crossaicore/cross-st.wiki.git"
 WIKI_REPO="${WIKI_HTTPS}"
 if [ "${WIKI_SSH:-0}" = "1" ]; then
     WIKI_REPO="${WIKI_SSH_URL}"

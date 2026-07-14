@@ -14,8 +14,11 @@ from cross_st import _markdown
 
 
 # ── Escape-hatch links (shown on every Full-LLM answer, per st-ask.md §1) ──
+# NOTE: crossai.dev has no "help" category and GitHub Discussions is not enabled
+# on this repo, so the community link points at the Discourse site root (always
+# resolves). The wiki base resolves once the GitHub wiki is published.
 _WIKI_BASE = "https://github.com/crossaicore/cross-st/wiki"
-_DISCOURSE_URL = "https://crossai.dev/c/help"
+_DISCOURSE_URL = "https://crossai.dev"
 _ISSUES_URL = "https://github.com/crossaicore/cross-st/issues"
 
 _LLM_SEE_ALSO = (
@@ -34,8 +37,8 @@ _SEE_ALSO_LINKS = (
     ("Issues", _ISSUES_URL),
 )
 _NO_MATCH_LINKS = (
-    ("GitHub Discussions", "https://github.com/crossaicore/cross-st/discussions"),
-    ("Cross Community", "https://crossai.dev/community"),
+    ("Community", _DISCOURSE_URL),
+    ("Issues", _ISSUES_URL),
 )
 
 
@@ -80,8 +83,10 @@ _SYSTEM_RULES = (
     "point the user to the wiki — do not guess.\n"
     "  3. Be concise and practical; prefer copy-pasteable commands.\n"
     "  4. Never ask the user to run cloud services or share secrets.\n"
-    "  5. End every answer with a 'See also:' block linking the most relevant "
-    "wiki page(s).\n\n"
+    "  5. When you mention an st-* command, format it as a markdown link to its "
+    "wiki page, e.g. [st-print](https://github.com/crossaicore/cross-st/wiki/st-print).\n"
+    "  6. Do NOT add your own 'See also' section — st-ask appends one "
+    "automatically. End with the answer itself.\n\n"
     "----- REFERENCE MATERIAL BEGINS -----\n"
     "{corpus}\n"
     "----- REFERENCE MATERIAL ENDS -----\n"
@@ -91,7 +96,7 @@ _FAQ = [
     {"id": "install", "question": "How do I install cross-st?", "answer": "Run: pipx install cross-st"},
     {"id": "upgrade", "question": "How do I upgrade cross-st?", "answer": "Run: st-admin --upgrade"},
     {"id": "api_key", "question": "How do I add an API key?", "answer": "Run: st-admin --setup and follow the prompts."},
-    {"id": "help", "question": "Where can I get help?", "answer": "See https://github.com/crossaicore/cross-st/discussions or https://crossai.dev/community"},
+    {"id": "help", "question": "Where can I get help?", "answer": "Ask the community at https://crossai.dev or file an issue at https://github.com/crossaicore/cross-st/issues"},
     {"id": "uninstall", "question": "How do I uninstall cross-st?", "answer": "Run: pipx uninstall cross-st"},
 ]
 

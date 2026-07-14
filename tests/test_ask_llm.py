@@ -34,7 +34,10 @@ class SystemPromptTests(unittest.TestCase):
         # Behaviour rules present
         self.assertIn("You are st-ask", sysp)
         self.assertIn("Only reference flags", sysp)
-        self.assertIn("See also:", sysp)
+        # Commands should be linked to their wiki pages (single-See-also design).
+        self.assertIn("wiki/st-print", sysp)
+        # The model must NOT emit its own See-also block (st-ask appends one).
+        self.assertIn("Do NOT add your own 'See also'", sysp)
         # Corpus delimiters present
         self.assertIn("REFERENCE MATERIAL BEGINS", sysp)
         self.assertIn("REFERENCE MATERIAL ENDS", sysp)
@@ -68,7 +71,7 @@ class LLMAnswerTests(unittest.TestCase):
             self.m._llm_answer("anthropic-sonnet", "q", "SYS")
         out = buf.getvalue()
         self.assertIn("See also:", out)
-        self.assertIn("crossai.dev/c/help", out)
+        self.assertIn("crossai.dev", out)
         self.assertIn("Run: pipx install cross-st", out)
 
     def test_llm_answer_prints_progress_message(self):
