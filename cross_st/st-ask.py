@@ -25,6 +25,41 @@ _LLM_SEE_ALSO = (
     f"  • Issues:    {_ISSUES_URL}"
 )
 
+# Labelled link lists for the escape-hatch blocks. In a rendering-capable
+# terminal these become OSC 8 clickable hyperlinks (MDR-6); piped / --no-render
+# output stays as plain bare-URL text for easy copy-paste.
+_SEE_ALSO_LINKS = (
+    ("Wiki", _WIKI_BASE),
+    ("Community", _DISCOURSE_URL),
+    ("Issues", _ISSUES_URL),
+)
+_NO_MATCH_LINKS = (
+    ("GitHub Discussions", "https://github.com/crossaicore/cross-st/discussions"),
+    ("Cross Community", "https://crossai.dev/community"),
+)
+
+
+def _print_link_block(header, links, render_pref=None):
+    """Print a labelled link list.
+
+    In a rendering-capable terminal the labels render as OSC 8 clickable
+    hyperlinks (via the markdown helper). When rendering is off (piped,
+    redirected, --no-render, NO_COLOR, CROSS_MARKDOWN=off) it prints plain
+    bare-URL text so the URLs stay easy to copy-paste.
+    """
+    if _markdown.should_render(sys.stdout, render_pref):
+        lines = []
+        if header:
+            lines.append(f"**{header}**\n")
+        lines += [f"- [{label}]({url})" for label, url in links]
+        print()
+        _markdown.print_markdown("\n".join(lines), render=True)
+    else:
+        if header:
+            print(f"\n{header}")
+        for label, url in links:
+            print(f"  • {label}: {url}")
+
 # System-prompt rules for the Full-LLM tier (ASK-14). The corpus
 # (support_content.md) is injected as the reference material.
 _SYSTEM_RULES = (
@@ -66,14 +101,13 @@ def _has_api_key():
 def _print_answer(entry, render_pref=None):
     _markdown.print_markdown(f"\n{entry['answer']}", render=render_pref)
     if entry.get('see_also'):
-        print(f"See also: {entry['see_also']}")
+        _print_link_block("See also:", [("Documentation", entry['see_also'])], render_pref)
     _markdown.print_muted(f"\n{FOOTER}", render=render_pref)
 
 def _print_no_match(render_pref=None):
     print("\nI don’t have a canned answer for that. Try:")
-    print("  • https://github.com/crossaicore/cross-st/discussions")
-    print("  • https://crossai.dev/community")
-    print("Starter questions:")
+    _print_link_block(None, _NO_MATCH_LINKS, render_pref)
+    print("\nStarter questions:")
     for entry in _FAQ[:5]:
         print(f"  - {entry['question']}")
     _markdown.print_muted(f"\n{FOOTER}", render=render_pref)
@@ -120,7 +154,7 @@ def _llm_answer(agent, user_query, system_prompt, render_pref=None):
         print(f'  st-ask --pseudo "{user_query}"')
         return
     _markdown.print_markdown(f"\n{answer}", render=render_pref)
-    print(_LLM_SEE_ALSO)
+    _print_link_block("See also:", _SEE_ALSO_LINKS, render_pref)
 
 def _read_last_error():
     path = os.path.expanduser("~/.cross_api_cache/last_error.json")

@@ -83,6 +83,34 @@ class LLMRenderTests(unittest.TestCase):
         self.assertIn("See also:", out)
 
 
+class SeeAlsoLinkTests(unittest.TestCase):
+    """MDR-6 — the See-also / escape-hatch link blocks."""
+
+    def setUp(self):
+        self.m = _load_st_ask()
+
+    def test_see_also_raw_is_bare_urls(self):
+        # Piped/non-tty → plain bare-URL block (copy-paste friendly).
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            self.m._print_link_block("See also:", self.m._SEE_ALSO_LINKS, None)
+        out = buf.getvalue()
+        self.assertIn("See also:", out)
+        self.assertIn("• Wiki: https://github.com/crossaicore/cross-st/wiki", out)
+        # No OSC 8 hyperlink escape in raw mode.
+        self.assertNotIn("\x1b]8;", out)
+
+    def test_see_also_osc8_via_markdown_helper(self):
+        import cross_st._markdown as md
+        buf = FakeTTY()
+        md.print_markdown("- [Wiki](https://github.com/crossaicore/cross-st/wiki)",
+                          render=True, stream=buf)
+        out = buf.getvalue()
+        # rich emits OSC 8 hyperlinks (ESC ] 8 ; … ; URL ST) for markdown links.
+        self.assertIn("\x1b]8;", out)
+        self.assertIn("crossaicore/cross-st/wiki", out)
+
+
 if __name__ == "__main__":
     unittest.main()
 
