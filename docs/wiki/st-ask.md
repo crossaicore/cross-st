@@ -7,6 +7,17 @@
 - `st-ask "How do I install cross-st?"` — one-shot answer
 - `st-ask` — interactive REPL
 
+## Rendered output
+
+Answers are shown as **rendered markdown** — styled headings, lists, code, and clickable links — when you run `st-ask` in a capable terminal. Piped or redirected output (e.g. `st-ask "…" | pbcopy`) stays **raw markdown** so it's easy to copy and reuse.
+
+| Flag / command | Effect |
+|----------------|--------|
+| `--no-render` | Print raw markdown instead of styled output |
+| `:raw` / `:render` (in the REPL) | Toggle rendering mid-session |
+
+For clickable links, see [Terminal Setup](Terminal-Setup) (macOS: `brew install --cask iterm2`). Set `CROSS_MARKDOWN=off` in `~/.crossenv` to disable rendering everywhere.
+
 ## Features
 - No API key required
 - Local, privacy-preserving

@@ -27,6 +27,7 @@ Reads fact-check data from a container and produces two outputs: a **stacked bar
 | `--no-cache` | Disable API cache |
 | `-v`, `--verbose` | Verbose output |
 | `-q`, `--quiet` | Minimal output |
+| `--no-render` | Print raw markdown for the AI analysis instead of rendered (styled) output |
 
 ### Chart output
 
@@ -48,6 +49,8 @@ Reads fact-check data from a container and produces two outputs: a **stacked bar
 | `--ai-summary` | Generate a 120–200-word summary → stdout |
 | `--ai-story` | Generate an 800–1200-word narrative → stdout |
 | `--agent AI` | AI provider for content generation (default: `xai`) |
+
+> The written analysis is shown as **rendered markdown** (styled, clickable links) in a capable terminal; piped/redirected output stays raw. Use `--no-render` for raw markdown, or set `CROSS_MARKDOWN=off` in `~/.crossenv` to disable rendering everywhere. See [Terminal Setup](Terminal-Setup).
 
 ### What-is lens — focused claim breakdown
 

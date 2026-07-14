@@ -80,6 +80,24 @@ and choose **Default AI**.  The setting is written as `DEFAULT_AGENT=gemini` in
 
 ---
 
+### The answers show raw markdown / the links aren't clickable. Can I fix that?
+
+Cross renders answers as styled markdown with clickable links in a capable
+terminal. On macOS, plain **Terminal.app** doesn't make links clickable —
+install [iTerm2](https://iterm2.com):
+
+```bash
+brew install --cask iterm2
+```
+
+VS Code's integrated terminal, WezTerm, Kitty, Windows Terminal, and most Linux
+terminals already support clickable links. To go the other way and force **raw**
+markdown (for copy-paste), use `--no-render`, pipe the output (piping is raw
+automatically), or set `CROSS_MARKDOWN=off` in `~/.crossenv`. See
+[Terminal Setup](Terminal-Setup).
+
+---
+
 ## Cache
 
 ### What is the cache and why do I want it?

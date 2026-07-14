@@ -4,6 +4,8 @@ Cross generates research reports using up to 5 AI providers simultaneously, then
 
 > **Windows users:** see the dedicated [Windows / WSL2](Windows-WSL2) guide.
 
+> 💡 **Tip (macOS):** For the best-looking output and clickable links, we recommend [iTerm2](https://iterm2.com) — `brew install --cask iterm2`. Any modern terminal works fine; see [Terminal Setup](Terminal-Setup).
+
 ---
 
 ## 1. Install Cross

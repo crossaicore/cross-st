@@ -58,6 +58,7 @@ New user? Start here: **[Onboarding](Onboarding)** — set up your API keys and 
 - [Multi-Model](Multi-Model) — run more than one model per provider via agents (`anthropic-opus` + `anthropic-sonnet` side-by-side)
 - [Agents](Agents) — what an agent is, naming rules, resolution order, and the `--agent` flag (cross-st 0.10.0+)
 - [Cross-Stones Benchmark](cross-stones) — benchmark suite: scoring, domains, leaderboard
+- [Terminal Setup](Terminal-Setup) — rendered output, clickable links, and the recommended terminal (macOS: iTerm2)
 - [FAQ](faq) — common questions and troubleshooting
 
 ---
@@ -70,5 +71,5 @@ pipx install "cross-st[tts]"   # with text-to-speech
 st-admin --setup              # configure API keys → ~/.crossenv
 ```
 
-Source: [github.com/b202i/cross-st](https://github.com/b202i/cross-st)
+Source: [github.com/crossaicore/cross-st](https://github.com/crossaicore/cross-st)
 
