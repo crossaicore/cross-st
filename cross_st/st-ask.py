@@ -10,6 +10,7 @@ from cross_st._ask_scrub import scrub
 from cross_st import ai_handler
 from cross_st import ai_error_handler
 from cross_st import mmd_startup
+from cross_st import _markdown
 
 
 # ── Escape-hatch links (shown on every Full-LLM answer, per st-ask.md §1) ──
@@ -62,20 +63,20 @@ def _has_api_key():
             return True
     return False
 
-def _print_answer(entry):
-    print(f"\n{entry['answer']}")
+def _print_answer(entry, render_pref=None):
+    _markdown.print_markdown(f"\n{entry['answer']}", render=render_pref)
     if entry.get('see_also'):
         print(f"See also: {entry['see_also']}")
-    print(f"\n{FOOTER}")
+    _markdown.print_muted(f"\n{FOOTER}", render=render_pref)
 
-def _print_no_match():
+def _print_no_match(render_pref=None):
     print("\nI don’t have a canned answer for that. Try:")
     print("  • https://github.com/crossaicore/cross-st/discussions")
     print("  • https://crossai.dev/community")
     print("Starter questions:")
     for entry in _FAQ[:5]:
         print(f"  - {entry['question']}")
-    print(f"\n{FOOTER}")
+    _markdown.print_muted(f"\n{FOOTER}", render=render_pref)
 
 def _load_support_content():
     path = os.path.join(os.path.dirname(__file__), "data", "support_content.md")
@@ -104,7 +105,7 @@ def _select_agent(args):
     except Exception:
         return None
 
-def _llm_answer(agent, user_query, system_prompt):
+def _llm_answer(agent, user_query, system_prompt, render_pref=None):
     # UX rule: announce the AI call before it runs (flush so it shows
     # even when output is buffered).
     print(f"  Generating answer with {agent}…", flush=True)
@@ -118,7 +119,7 @@ def _llm_answer(agent, user_query, system_prompt):
         print("Falling back to local lookup — retry with:")
         print(f'  st-ask --pseudo "{user_query}"')
         return
-    print(f"\n{answer}")
+    _markdown.print_markdown(f"\n{answer}", render=render_pref)
     print(_LLM_SEE_ALSO)
 
 def _read_last_error():
@@ -132,7 +133,7 @@ def _read_last_error():
         return None
     return data[-1]
 
-def _explain_last_error(agent, system_prompt):
+def _explain_last_error(agent, system_prompt, render_pref=None):
     last = _read_last_error()
     if not last:
         print("No recent error recorded.")
@@ -149,20 +150,20 @@ def _explain_last_error(agent, system_prompt):
         "State the most likely cause and give the exact command(s) to fix it:\n\n"
         f"{error_text}"
     )
-    _llm_answer(agent, prompt, system_prompt)
+    _llm_answer(agent, prompt, system_prompt, render_pref)
 
-def _pseudo_answer(query):
+def _pseudo_answer(query, render_pref=None):
     """Render a Pseudo-AI (local lookup) answer for a single query."""
     matches = find_matches(query, _FAQ, top_k=3)
     if matches and matches[0]['_score'] > 0.6:
-        _print_answer(matches[0])
+        _print_answer(matches[0], render_pref)
     elif matches and matches[0]['_score'] > 0.3:
         print("\nDid you mean:")
         for m in matches:
             print(f"  - {m['question']}")
-        print(f"\n{FOOTER}")
+        _markdown.print_muted(f"\n{FOOTER}", render=render_pref)
     else:
-        _print_no_match()
+        _print_no_match(render_pref)
 
 def main():
     # Load ~/.crossenv + project .env layers so API keys and DEFAULT_AGENT are
@@ -175,7 +176,12 @@ def main():
     parser.add_argument("--agent", help="Agent name to use for LLM tier")
     parser.add_argument("--pseudo", action="store_true", help="Force Pseudo-AI tier even if API key present")
     parser.add_argument("--explain-last-error", action="store_true", help="Explain the last error using the LLM tier")
+    parser.add_argument("--no-render", action="store_true", help="Print raw markdown instead of rendered (styled) output")
     args = parser.parse_args()
+
+    # Rendering preference: None = smart default (on in a TTY, raw when piped);
+    # False = forced raw via --no-render.
+    render_pref = False if args.no_render else None
 
     if args.explain_last_error:
         if _has_api_key() and not args.pseudo:
@@ -184,7 +190,7 @@ def main():
             if not agent or not system_prompt:
                 print("LLM tier unavailable. Try again without --explain-last-error.")
                 return 1
-            _explain_last_error(agent, system_prompt)
+            _explain_last_error(agent, system_prompt, render_pref)
             return 0
         else:
             print("Pseudo-AI error explanation not implemented in this mode.")
@@ -198,10 +204,10 @@ def main():
             return 1
         if args.question:
             user_query = " ".join(args.question)
-            _llm_answer(agent, user_query, system_prompt)
+            _llm_answer(agent, user_query, system_prompt, render_pref)
             return 0
         # REPL for LLM tier
-        print("st-ask (LLM): Type your question, or :quit to exit.")
+        print("st-ask (LLM): Type your question, :raw/:render to toggle rendering, or :quit to exit.")
         while True:
             try:
                 q = input("> ").strip()
@@ -209,14 +215,22 @@ def main():
                 print()
                 break
             if not q or q in (":quit", ":exit"): break
-            _llm_answer(agent, q, system_prompt)
+            if q == ":raw":
+                render_pref = False
+                print("  Rendering off (raw markdown).")
+                continue
+            if q == ":render":
+                render_pref = True
+                print("  Rendering on.")
+                continue
+            _llm_answer(agent, q, system_prompt, render_pref)
         return 0
     # Pseudo-AI tier
     if args.question:
-        _pseudo_answer(" ".join(args.question))
+        _pseudo_answer(" ".join(args.question), render_pref)
         return 0
     # REPL
-    print("st-ask: Local FAQ help. Type your question, or :quit to exit.")
+    print("st-ask: Local FAQ help. Type your question, :raw/:render to toggle rendering, or :quit to exit.")
     while True:
         try:
             q = input("> ").strip()
@@ -224,7 +238,15 @@ def main():
             print()
             break
         if not q or q in (":quit", ":exit"): break
-        _pseudo_answer(q)
+        if q == ":raw":
+            render_pref = False
+            print("  Rendering off (raw markdown).")
+            continue
+        if q == ":render":
+            render_pref = True
+            print("  Rendering on.")
+            continue
+        _pseudo_answer(q, render_pref)
     return 0
 
 if __name__ == "__main__":
