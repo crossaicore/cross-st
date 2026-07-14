@@ -103,12 +103,26 @@ class SeeAlsoLinkTests(unittest.TestCase):
     def test_see_also_osc8_via_markdown_helper(self):
         import cross_st._markdown as md
         buf = FakeTTY()
-        md.print_markdown("- [Wiki](https://github.com/crossaicore/cross-st/wiki)",
+        md.print_markdown("- Wiki: [https://github.com/crossaicore/cross-st/wiki]"
+                          "(https://github.com/crossaicore/cross-st/wiki)",
                           render=True, stream=buf)
         out = buf.getvalue()
         # rich emits OSC 8 hyperlinks (ESC ] 8 ; … ; URL ST) for markdown links.
         self.assertIn("\x1b]8;", out)
         self.assertIn("crossaicore/cross-st/wiki", out)
+
+    def test_see_also_rendered_shows_visible_url_text(self):
+        # Regression (post-MDR-6): the URL must remain VISIBLE, not just a label.
+        import cross_st._markdown as md
+        buf = FakeTTY()
+        with redirect_stdout(buf):
+            self.m._print_link_block("See also:", self.m._SEE_ALSO_LINKS, True)
+        # rich wraps long URLs; strip ANSI + newlines and check the host/path
+        # fragments are present as visible text.
+        import re
+        visible = re.sub(r"\x1b\[[0-9;]*m", "", buf.getvalue())
+        self.assertIn("crossai.dev/c/help", visible)
+        self.assertIn("Community", visible)
 
 
 if __name__ == "__main__":

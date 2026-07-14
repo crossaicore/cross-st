@@ -42,16 +42,23 @@ _NO_MATCH_LINKS = (
 def _print_link_block(header, links, render_pref=None):
     """Print a labelled link list.
 
-    In a rendering-capable terminal the labels render as OSC 8 clickable
-    hyperlinks (via the markdown helper). When rendering is off (piped,
+    In a rendering-capable terminal each URL is shown in full **and** made an
+    OSC 8 clickable hyperlink (the visible URL text is the clickable target),
+    so users can both see and click/copy it. When rendering is off (piped,
     redirected, --no-render, NO_COLOR, CROSS_MARKDOWN=off) it prints plain
-    bare-URL text so the URLs stay easy to copy-paste.
+    bare-URL text.
     """
     if _markdown.should_render(sys.stdout, render_pref):
         lines = []
         if header:
             lines.append(f"**{header}**\n")
-        lines += [f"- [{label}]({url})" for label, url in links]
+        for label, url in links:
+            # Visible link text is the URL itself → the URL stays on screen and
+            # is clickable. A distinct label (e.g. "Wiki") prefixes it.
+            if label and label != url:
+                lines.append(f"- {label}: [{url}]({url})")
+            else:
+                lines.append(f"- [{url}]({url})")
         print()
         _markdown.print_markdown("\n".join(lines), render=True)
     else:
