@@ -115,6 +115,26 @@ def get_recommended_models(make: str) -> list[tuple[str, str, bool]]:
     return list(RECOMMENDED_MODELS.get(make, ()))
 
 
+def get_ollama_models() -> list[str]:
+    """Return locally-installed Ollama model tags via live ``/api/tags``.
+
+    Thin wrapper over ``cross_ai_core.ai_ollama.OllamaHandler.list_models()``
+    (added in OLL-3, cross-ai-core 0.10.0), which queries the daemon at
+    ``OLLAMA_BASE_URL`` and returns tags like ``"llama3.1:latest"``.  Returns
+    ``[]`` (never raises) when the daemon is unreachable, has no models, or the
+    installed cross-ai-core predates the helper — callers then show a
+    "start the daemon / ``ollama pull``" hint.
+    """
+    try:
+        from cross_ai_core.ai_ollama import OllamaHandler
+    except ImportError:
+        return []
+    try:
+        return OllamaHandler.list_models()
+    except Exception:
+        return []
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Legacy `.ai_models` migration (CST-MM-j)
 # ─────────────────────────────────────────────────────────────────────────────

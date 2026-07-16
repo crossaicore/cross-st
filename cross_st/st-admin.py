@@ -2134,17 +2134,27 @@ def _pick_model(make: str, current=None):
         from cross_ai_core import get_available_models
     except ImportError:
         get_available_models = None
-    try:
-        if get_available_models is None:
-            raise ImportError("cross-ai-core < 0.7.1 — get_available_models unavailable")
-        models = get_available_models(make)
-    except Exception as exc:
-        print(f"  ⚠️  Live discovery unavailable ({exc}); using curated suggestions.")
-        from _agent_admin import get_recommended_models
+    if make == "ollama":
+        # Ollama models are user-installed and discovered live over HTTP
+        # (/api/tags) rather than via a provider SDK, so bypass
+        # get_available_models and query the daemon directly (OLL-CST-2).
+        from _agent_admin import get_ollama_models
         models = [
-            type("M", (), {"id": mid, "is_recommended": rec, "is_default": False})
-            for mid, _label, rec in get_recommended_models(make)
+            type("M", (), {"id": mid, "is_recommended": False, "is_default": False})
+            for mid in get_ollama_models()
         ]
+    else:
+        try:
+            if get_available_models is None:
+                raise ImportError("cross-ai-core < 0.7.1 — get_available_models unavailable")
+            models = get_available_models(make)
+        except Exception as exc:
+            print(f"  ⚠️  Live discovery unavailable ({exc}); using curated suggestions.")
+            from _agent_admin import get_recommended_models
+            models = [
+                type("M", (), {"id": mid, "is_recommended": rec, "is_default": False})
+                for mid, _label, rec in get_recommended_models(make)
+            ]
 
     print(f"\n  Available models for {make}:")
     if models:
@@ -2152,6 +2162,10 @@ def _pick_model(make: str, current=None):
             star = "★" if getattr(m, "is_recommended", False) else " "
             current_marker = "  (current)" if current == m.id else ""
             print(f"    {i:>2}. {star} {m.id}{current_marker}")
+    elif make == "ollama":
+        from cross_ai_core.ai_ollama import get_base_url
+        print(f"    (no models found at {get_base_url()} — is `ollama serve` running?)")
+        print("     Pull one first, e.g.:  ollama pull llama3.1")
     else:
         print("    (no models discovered for this provider — type a model id)")
     print("     0.   <use the provider's recommended default (model = null)>")
@@ -2460,6 +2474,16 @@ def interactive_menu() -> None:
                             )
                             for make in _builtin_makes():
                                 try:
+                                    if make == "ollama":
+                                        # Ollama is always live (/api/tags) —
+                                        # no SDK / 7-day cache to refresh.
+                                        from _agent_admin import get_ollama_models
+                                        ids = get_ollama_models()
+                                        print(
+                                            f"    ✓  {make:<11} {len(ids):>3} "
+                                            f"models (live)"
+                                        )
+                                        continue
                                     models = get_available_models(make, refresh=True)
                                     rec = sum(
                                         1 for m in models
