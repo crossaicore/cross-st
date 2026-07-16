@@ -156,7 +156,7 @@ menus = {
 def _agents_with_keys() -> list[str]:
     raw = get_ai_list()
     try:
-        from cross_ai_core import has_api_key
+        from cross_ai_core import has_api_key, PROVIDER_API_KEY_ENV
         from cross_ai_core.agents import get_agents
     except ImportError:
         return raw
@@ -165,6 +165,11 @@ def _agents_with_keys() -> list[str]:
     for name in raw:
         spec = agents.get(name)
         if spec is None:
+            filtered.append(name)
+            continue
+        # Keyless providers (ollama — local/LAN) are always available, so keep
+        # them without consulting has_api_key (which would raise for them).
+        if spec.make not in PROVIDER_API_KEY_ENV:
             filtered.append(name)
             continue
         try:

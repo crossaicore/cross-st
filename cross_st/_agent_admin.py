@@ -629,14 +629,36 @@ def env_override_for(agent: str, make: str) -> "str | None":
     return None
 
 
-def _has_api_key_safe(make: str) -> bool:
-    """Return ``True`` iff *make* has a non-empty API key in the env.
+def _provider_needs_key(make: str) -> bool:
+    """Return ``True`` if *make* is a keyed provider (needs an API key).
 
-    Wrapper around :func:`cross_ai_core.has_api_key` (AGT-1c) that
-    swallows ``ImportError`` (cross-ai-core < 0.8.0) and ``ValueError``
-    (unknown provider) — both treated as "key present" so callers don't
-    accidentally hide agents on older cross-ai-core.
+    Keyless providers — those with **no** entry in
+    ``cross_ai_core.PROVIDER_API_KEY_ENV`` (currently only ``ollama``, which
+    runs locally / on the LAN) — return ``False`` and are always available.
+    On a cross-ai-core too old to expose the map, assume keyed (the safest
+    default for the cloud providers that existed then).
     """
+    try:
+        from cross_ai_core import PROVIDER_API_KEY_ENV
+    except ImportError:
+        return True
+    return make in PROVIDER_API_KEY_ENV
+
+
+def _has_api_key_safe(make: str) -> bool:
+    """Return ``True`` iff an agent using *make* can run right now.
+
+    That means the provider is **keyless** (e.g. ``ollama`` — local/LAN, no key
+    needed) *or* it has a non-empty API key in the environment.  Never raises:
+
+    * ``ImportError`` (cross-ai-core < 0.8.0, no ``has_api_key``) → ``True``.
+    * Keyless / unknown provider (``make`` absent from ``PROVIDER_API_KEY_ENV``)
+      → ``True`` — so an ``ollama`` agent is never hidden, and older cores don't
+      accidentally drop agents.
+    * Any unexpected error from ``has_api_key`` → ``True``.
+    """
+    if not _provider_needs_key(make):
+        return True  # keyless (ollama) or unknown → always available
     try:
         from cross_ai_core import has_api_key
     except ImportError:
@@ -735,6 +757,9 @@ def agents_missing_keys() -> list[tuple[str, str, str]]:
         return []
     out: list[tuple[str, str, str]] = []
     for agent, spec in get_agents().items():
+        # Keyless providers (ollama) need no key — never "missing".
+        if not _provider_needs_key(spec.make):
+            continue
         try:
             if has_api_key(spec.make):
                 continue

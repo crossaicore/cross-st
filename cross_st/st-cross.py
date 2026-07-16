@@ -349,6 +349,43 @@ def _get_provider_semaphore(agent: str, max_override, sequential: bool) -> threa
         return sem
 
 
+def _filter_agents_by_key(ai_list: list) -> "tuple[list, list]":
+    """Return ``(kept, dropped)`` — drop keyed agents whose API key is unset.
+
+    Keyless providers (e.g. ``ollama`` — local/LAN, absent from
+    ``PROVIDER_API_KEY_ENV``) are **always kept**; ``has_api_key`` is never
+    called for them (it raises for keyless makes).  Falls open — keeps every
+    agent — on a cross-ai-core too old to expose the key helpers.
+
+    ``dropped`` is ``[(agent, make, env_var), …]`` for the caller's warnings.
+    """
+    try:
+        from cross_ai_core import (
+            api_key_env_var, has_api_key, PROVIDER_API_KEY_ENV,
+        )
+        from cross_ai_core.agents import get_agents
+    except ImportError:
+        return list(ai_list), []
+    agents = get_agents()
+    kept: list = []
+    dropped: list = []
+    for name in ai_list:
+        spec = agents.get(name)
+        # Unknown agent or keyless provider (ollama) → always available.
+        if spec is None or spec.make not in PROVIDER_API_KEY_ENV:
+            kept.append(name)
+            continue
+        try:
+            available = has_api_key(spec.make)
+        except Exception:
+            available = True  # never hide an agent on an unexpected error
+        if available:
+            kept.append(name)
+        else:
+            dropped.append((name, spec.make, api_key_env_var(spec.make)))
+    return kept, dropped
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main() -> None:
     require_config()
@@ -431,34 +468,18 @@ def main() -> None:
     cache_flag  = "--cache" if args.cache else "--no-cache"
 
     ai_list = get_ai_list()
-    # AGT-5: drop agents whose provider has no API key in the env.  A
-    # missing key would crash the cell on first call and waste a column;
-    # better to skip with a one-line warning so the matrix only contains
-    # callable agents.  Falls open (keeps every agent) when cross-ai-core
-    # is older than 0.8.0 — preserves the pre-AGT-5 behaviour for users
-    # who haven't upgraded the core yet.
-    try:
-        from cross_ai_core import api_key_env_var, has_api_key
-        from cross_ai_core.agents import get_agents
-        _agents = get_agents()
-        _kept: list[str] = []
-        _dropped: list[tuple[str, str, str]] = []
-        for _name in ai_list:
-            _spec = _agents.get(_name)
-            if _spec is None or has_api_key(_spec.make):
-                _kept.append(_name)
-            else:
-                _dropped.append((_name, _spec.make, api_key_env_var(_spec.make)))
-        if _dropped:
-            for _name, _make, _env in _dropped:
-                print(
-                    f"  ⚠️  Skipping agent '{_name}' ({_make}): {_env} is unset.",
-                    flush=True,
-                )
-        if _kept:
-            ai_list = _kept
-    except ImportError:
-        pass
+    # AGT-5 / OLL-CST-3: drop keyed agents whose API key is unset (a missing
+    # key would crash the cell on first call and waste a column).  Keyless
+    # providers (ollama — local/LAN) are always kept.  Falls open on
+    # cross-ai-core older than 0.8.0.
+    _kept, _dropped = _filter_agents_by_key(ai_list)
+    for _name, _make, _env in _dropped:
+        print(
+            f"  ⚠️  Skipping agent '{_name}' ({_make}): {_env} is unset.",
+            flush=True,
+        )
+    if _kept:
+        ai_list = _kept
     N       = len(ai_list)
 
     # --dry-run implies --skip-gen: we only preview the Step 2 matrix, and
