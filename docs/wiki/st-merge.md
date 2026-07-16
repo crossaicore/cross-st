@@ -4,7 +4,7 @@ Combines multiple AI-generated stories into one cohesive report. When fact-check
 
 **Run after:** `st-bang`    **Run before:** `st-post`
 
-**Related:** [st-bang](st-bang)  [st-fix](st-fix)  [st-post](st-post)
+**Related:** [st-bang](st-bang)  [st-fix](st-fix)  [st-post](st-post)  [Ollama](Ollama)
 
 ---
 

@@ -4,6 +4,8 @@ Generates stories from all AI providers simultaneously, then merges them into on
 
 **Run after:** `st-new`    **Run before:** `st-cross`  `st-merge`
 
+> 💡 **Local models:** any `--agent` here can be a keyless on-device [Ollama](Ollama) agent — nothing leaves your machine.
+
 ---
 
 ## Examples

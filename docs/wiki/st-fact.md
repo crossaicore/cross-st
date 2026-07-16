@@ -4,6 +4,8 @@ Sends a single story to an AI and asks it to fact-check every claim, scoring eac
 
 **Run after:** `st-prep`    **Run before:** `st-verdict`  `st-fix`  `st-heatmap`  `st-cross`
 
+> 💡 **Local models:** any `--agent` here can be a keyless on-device [Ollama](Ollama) agent — nothing leaves your machine.
+
 ![st-fact workflow](st-fact-flow.svg)
 
 ```bash

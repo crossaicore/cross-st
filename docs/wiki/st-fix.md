@@ -6,7 +6,7 @@ exactly as the AI wrote it.
 
 **Run after:** `st-fact`    **Run before:** `st-post`
 
-**Related:** [st-fact](st-fact.md)  [st-merge](st-merge.md)  [st-post](st-post.md)  [Multi-Model](Multi-Model)
+**Related:** [st-fact](st-fact.md)  [st-merge](st-merge.md)  [st-post](st-post.md)  [Multi-Model](Multi-Model)  [Ollama](Ollama)
 
 > **Multi-model (0.9.0+):** when `--agent` is omitted, `st-fix` defaults the rewriter to the agent whose `(make, model)` matches the source story — an Opus-authored story is rewritten by Opus, not by the bare `anthropic` handler default. See [Multi-Model](Multi-Model).
 

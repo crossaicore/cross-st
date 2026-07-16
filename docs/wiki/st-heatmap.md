@@ -6,6 +6,8 @@ Darker cells = higher veracity scores. The diagonal shows self-evaluation scores
 
 **Run after:** `st-cross`
 
+> 💡 **Local models:** any `--agent` here can be a keyless on-device [Ollama](Ollama) agent — nothing leaves your machine.
+
 ## Examples
 
 ```bash

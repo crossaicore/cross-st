@@ -188,6 +188,7 @@ one-off bypass.
 ## See also
 
 - [st-cross](st-cross) — full pipeline that benefits most from agents
+- [Ollama](Ollama) — run agents **locally / on your LAN**, keyless and private (no API key)
 - [ai-providers](ai-providers) — per-provider strengths and per-make `<MAKE>_MODEL` env var docs
 - [Container-Format](Container-Format) — how `make` and `model` are stored on each entry
 - `cross-ai-core` [CHANGELOG `[0.7.0]`](https://github.com/b202i/cross-ai-core/blob/master/CHANGELOG.md) — library-level details

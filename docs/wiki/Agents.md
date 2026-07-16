@@ -104,4 +104,5 @@ A one-line notice prints during startup so you know what happened. The migration
 - [st-admin](st-admin) — interactive agent management UI (`a` → `m` → `a/r/e/R`)
 - [Multi-Model](Multi-Model) — running matrices across multiple agents
 - [ai-providers](ai-providers) — vocabulary: provider vs model vs agent
+- [Ollama](Ollama) — run models **locally / on your LAN** with a keyless agent (private, no API key)
 

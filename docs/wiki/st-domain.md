@@ -2,7 +2,7 @@
 
 Guides you through building a `.prompt` file for a new [Cross-Stones](cross-stones.md) benchmark domain. The prompt tells every AI exactly what 10 fact-checkable claims to generate — the controlled input that makes benchmark scores comparable across time.
 
-**Related:** [st-stones](st-stones.md) · [st-cross](st-cross.md) · [Cross-Stones](cross-stones.md)
+**Related:** [st-stones](st-stones.md)  [st-cross](st-cross.md)  [Cross-Stones](cross-stones.md)  [Ollama](Ollama)
 
 ---
 

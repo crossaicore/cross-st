@@ -2,7 +2,9 @@
 
 Creates a fresh prompt file from a template and opens your editor so you can fill in the topic. The starting point for every new research report.
 
-**Run before:** `st-gen` · `st-bang`
+**Run before:** `st-gen`  `st-bang`
+
+> 💡 **Local models:** the `--agent`/`--gen` flow can target a keyless on-device [Ollama](Ollama) agent — nothing leaves your machine.
 
 ## Examples
 

@@ -6,6 +6,8 @@ For first-time setup (getting API keys, running `st-admin --setup`), see [Onboar
 
 > **Multi-model:** since `cross-st 0.9.0` you can also run **more than one model per provider** in the same matrix (e.g. `anthropic-opus` and `anthropic-sonnet` competing side-by-side). See **[Multi-Model](Multi-Model)** for the agent file format.
 
+> **Local & private:** prefer to keep everything on your own hardware? **[Ollama](Ollama)** runs open-weight models locally or on your LAN — no API key, no per-token cost, and nothing leaves your machine.
+
 ---
 
 ## Quick-pick guide

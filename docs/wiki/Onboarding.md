@@ -102,6 +102,22 @@ Perplexity Sonar models include **live web search with citations** — useful fo
 
 ---
 
+### 🖥️ Ollama — local & private (no API key)
+
+Prefer to keep everything on your own machine? **Ollama** runs open-weight models locally — **no API key, no per-token cost, and nothing leaves your hardware.**
+
+```bash
+brew install ollama                            # macOS (or install Ollama.app)
+ollama serve &                                 # start the local daemon
+ollama pull llama3.1                           # download a model (one-time)
+st-admin --add-agent ollama-llama=ollama:llama3.1
+st-gen --agent ollama-llama report.prompt
+```
+
+You can also point Cross at a beefier LAN machine. Full guide: **[Ollama](Ollama)**.
+
+---
+
 ## 4. Configure Cross
 
 Run the setup wizard:

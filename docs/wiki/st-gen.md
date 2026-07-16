@@ -37,7 +37,7 @@ st-gen --no-prep subject.prompt         # store raw data only, skip st-prep
 | `-v`, `--verbose` | Verbose output |
 | `-q`, `--quiet` | Minimal output |
 
-**Related:** [st-bang](st-bang) · [st-prep](st-prep) · [AI Providers](ai-providers)
+**Related:** [st-bang](st-bang)  [st-prep](st-prep)  [AI Providers](ai-providers)  [Ollama](Ollama)
 
 ---
 

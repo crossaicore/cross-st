@@ -55,6 +55,7 @@ New user? Start here: **[Onboarding](Onboarding)** — set up your API keys and 
 - [Showcase Workflows](Showcase-Workflows) — three killer workflows: "Is this fake news?", "What's missing?", "What can I trust?"
 - [Container Format](Container-Format) — anatomy of `subject.json`: `data[]`, `story[]`, `fact[]`, timing
 - [AI Providers](ai-providers) — all 5 providers, models, free vs paid tiers
+- [Ollama](Ollama) — run models **locally / on your LAN**, private and keyless (no API key)
 - [Multi-Model](Multi-Model) — run more than one model per provider via agents (`anthropic-opus` + `anthropic-sonnet` side-by-side)
 - [Agents](Agents) — what an agent is, naming rules, resolution order, and the `--agent` flag (cross-st 0.10.0+)
 - [Cross-Stones Benchmark](cross-stones) — benchmark suite: scoring, domains, leaderboard

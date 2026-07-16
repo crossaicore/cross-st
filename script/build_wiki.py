@@ -37,24 +37,24 @@ os.makedirs(WIKI_DIR, exist_ok=True)
 METADATA: dict[str, dict] = {
     "st": {
         "desc": "The interactive menu launcher. Run `st` in any directory with a `.json` story file and you get a keyboard-driven interface for the full Cross workflow.",
-        "related": ["st-new", "st-bang", "Onboarding"],
+        "related": ["st-new", "st-bang", "Onboarding", "Ollama"],
     },
     "st-admin": {
         "desc": "Manages your Cross settings: default AI provider, per-provider model overrides, TTS voice, editor, and prompt templates. Run once during setup, then whenever you want to switch providers.",
-        "related": ["st-new", "ai-providers", "tts-audio"],
+        "related": ["st-new", "ai-providers", "tts-audio", "Ollama"],
         "dev": "Reads and writes `~/.crossenv` (global) and `.env` (repo-local). Model overrides are stored in `.ai_models`, one `provider=model` per line. `--init-templates` seeds `~/.cross_templates/` from the bundled `template/` directory.",
     },
     "st-analyze": {
         "desc": "Generates a narrative summary of the cross-product fact-check results — who scored highest, where AIs disagreed, and which claims were consistently disputed.",
         "after": ["st-cross"],
-        "related": ["st-cross", "st-heatmap", "st-verdict"],
+        "related": ["st-cross", "st-heatmap", "st-verdict", "Ollama"],
         "dev": "Flattens `fact[]` entries via `mmd_data_analysis.get_flattened_fc_data()` and passes the structured data to an AI for a prose summary.",
     },
     "st-bang": {
         "desc": "Generates stories from all AI providers simultaneously, then merges them into one container. Much faster than running `st-gen` once per provider.",
         "after": ["st-new"],
         "before": ["st-cross", "st-merge"],
-        "related": ["st-gen", "st-merge", "st-cross"],
+        "related": ["st-gen", "st-merge", "st-cross", "Ollama"],
         "dev": "Launches one `st-gen --bang N` subprocess per AI. Each writes to `tmp/<story>_N.json` and creates a `.block` file. `st-bang` polls every second until all block files are removed, then merges the tmp files into the main container.",
     },
     "st-cat": {
@@ -65,13 +65,13 @@ METADATA: dict[str, dict] = {
         "desc": "Runs the full research pipeline in one command: generates a story from every AI, then has every AI fact-check every story. The result is an N×N score matrix saved into the container.",
         "after": ["st-new"],
         "before": ["st-merge", "st-heatmap", "st-verdict", "st-analyze"],
-        "related": ["st-bang", "st-fact", "st-heatmap", "st-verdict"],
+        "related": ["st-bang", "st-fact", "st-heatmap", "st-verdict", "Ollama"],
         "dev": "Step 1 runs `st-gen --prep` per AI in parallel threads. Step 2 fact-checks all N×N pairs — each column (fact-checker AI) is a separate thread, serializing writes per story to avoid JSON corruption. The live ANSI display is updated every second. Ctrl+C preserves results collected so far.",
     },
     "st-domain": {
         # NOTE: docs/wiki/st-domain.md is hand-authored — build_wiki.py will not overwrite it.
         "desc": "Interactive wizard that builds a Cross-Stones benchmark domain prompt. Guides you through naming the domain, describing the topic, and smoke-testing that the AI returns exactly the right number of fact-checkable claims.",
-        "related": ["st-stones", "st-cross", "cross-stones"],
+        "related": ["st-stones", "st-cross", "cross-stones", "Ollama"],
         "dev": "Follows DOMAIN_PROMPT_PROCESS.md Phases 2–4. Phase 2: collects slug, display name, topic description, year range, source types. Phase 3: calls AI for 5 aspect suggestions, assembles the `_DOMAIN_PROMPT_TEMPLATE`, previews and saves. Phase 4: smoke-test sends the finished prompt to one AI and checks claim count. `--set` registers the new domain in a benchmark set config via `_add_to_benchmark_set()`.",
     },
     "st-edit": {
@@ -83,7 +83,7 @@ METADATA: dict[str, dict] = {
         "desc": "Sends a single story to an AI and asks it to fact-check every claim, scoring each one true, partially true, or false. Appends the result to the container.",
         "after": ["st-prep"],
         "before": ["st-fix", "st-heatmap"],
-        "related": ["st-cross", "st-fix", "st-heatmap"],
+        "related": ["st-cross", "st-fix", "st-heatmap", "Ollama"],
         "dev": "Splits the story into segments via `mmd_util.build_segments()`, sends them to the AI, and appends a `fact[]` entry to the container. The entry includes `score`, `counts`, `summary`, `claims[]` (per-segment verdicts), and `timing{}`.",
     },
     "st-fetch": {
@@ -102,20 +102,20 @@ METADATA: dict[str, dict] = {
         "desc": "Rewrites the weak parts of a story using its fact-check results. Only sentences scored False or Partially False are touched — everything that checked out stays exactly as the AI wrote it.",
         "after": ["st-fact"],
         "before": ["st-post"],
-        "related": ["st-fact", "st-merge", "st-post"],
+        "related": ["st-fact", "st-merge", "st-post", "Ollama"],
         "dev": "Four modes: `iterate` (default) fixes one sentence at a time with inline verification; `patch` bundles all false claims into one prompt; `best-source` uses other AI stories as reference material; `synthesize` passes all stories and scores to one AI for a full rewrite. Mode set via `--mode`. See [st-fix-implementation.md](st-fix-implementation.md) for architecture details.",
     },
     "st-gen": {
         "desc": "Sends your prompt file to an AI provider and saves the raw response into a `.json` container. This is the first step — the container it creates is used by every other command.",
         "after": ["st-new"],
         "before": ["st-prep"],
-        "related": ["st-bang", "st-prep", "ai-providers"],
+        "related": ["st-bang", "st-prep", "ai-providers", "Ollama"],
         "dev": "Writes a new entry to `data[]` in the container. Caching is MD5-keyed on the serialized request payload — two identical prompts to the same model always hit the cache. `--bang N` is used internally by `st-bang` (writes to `tmp/` and creates a block file); don't call it directly.",
     },
     "st-heatmap": {
         "desc": "Generates a color-coded grid showing how every AI-pair scored in the cross-product fact-check. Rows are evaluator AIs, columns are target story authors. Darker cells = higher veracity scores. The diagonal shows self-evaluation scores.",
         "after": ["st-cross"],
-        "related": ["st-cross", "st-verdict", "st-speed", "st-analyze"],
+        "related": ["st-cross", "st-verdict", "st-speed", "st-analyze", "Ollama"],
         "dev": "Uses `mmd_data_analysis.get_flattened_fc_data()` to build the score matrix, then renders with `mmd_plot`. AI content flags (`--ai-caption` etc.) call `process_prompt()` from `ai_handler` with the flattened score data as context.",
     },
     "st-ls": {
@@ -131,19 +131,19 @@ METADATA: dict[str, dict] = {
         "desc": "Combines multiple AI-generated stories into one cohesive report. When fact-check scores are available it uses the highest-scoring story as the base and pulls in verified facts from the others.",
         "after": ["st-bang"],
         "before": ["st-post"],
-        "related": ["st-bang", "st-fix", "st-post"],
+        "related": ["st-bang", "st-fix", "st-post", "Ollama"],
         "dev": "Two modes selected automatically: `simple` (no fact data — all stories passed to synthesizer AI) and `quality` (uses fact scores — highest-scoring story is the base; its author AI performs the rewrite for consistent voice). Override with `--simple` or `--quality`.",
     },
     "st-new": {
         "desc": "Creates a fresh prompt file from a template and opens your editor so you can fill in the topic. The starting point for every new research report.",
         "before": ["st-gen", "st-bang"],
-        "related": ["st-gen", "st-bang", "st-admin"],
+        "related": ["st-gen", "st-bang", "st-admin", "Ollama"],
         "dev": "Template resolution order: `./template/` (CWD) → `~/.cross_templates/` → `<script-dir>/template/`. After editing, optionally launches `st-bang` automatically. `st-admin --init-templates` seeds `~/.cross_templates/` for pip/pipx installs.",
     },
     "st-plot": {
         "desc": "Generates charts from cross-product data: score distributions, AI comparisons, and timing breakdowns. Displays in the browser or saves to files.",
         "after": ["st-cross"],
-        "related": ["st-cross", "st-heatmap", "st-verdict", "st-speed"],
+        "related": ["st-cross", "st-heatmap", "st-verdict", "st-speed", "Ollama"],
         "dev": "Chart rendering lives in `mmd_plot.py`. Use `--plot all` to generate every chart type, `--file` to save instead of display, and `--path` to set the output directory.",
     },
     "st-post": {
@@ -185,19 +185,19 @@ METADATA: dict[str, dict] = {
         # NOTE: docs/wiki/st-speed.md is hand-authored — build_wiki.py will not overwrite it.
         "desc": "Compares AI provider performance across a container: generation time, tokens per second, fact-checking throughput, and consistency. Useful for choosing a provider when speed matters.",
         "after": ["st-bang", "st-cross"],
-        "related": ["st-stones", "st-cross", "st-heatmap"],
+        "related": ["st-stones", "st-cross", "st-heatmap", "Ollama"],
         "dev": "Reads `timing{}` dicts from `data[]` entries (generation) and `fact[].timing` dicts (fact-checking). Timing is written by `st-gen` / `st-fact` on every non-cached call and is absent on cache hits.",
     },
     "st-stones": {
         "desc": "Scores AI providers on the Cross-Stones benchmark: a fixed set of domain prompts, each requiring exactly 10 fact-checkable claims. Produces a composite accuracy + speed leaderboard.",
         "after": ["st-cross"],
-        "related": ["st-domain", "st-speed", "cross-stones"],
+        "related": ["st-domain", "st-speed", "cross-stones", "Ollama"],
         "dev": "Score formula: `w1 × (fact_score / max_fact_score) + w2 × (speed_score / max_speed_score)` with defaults `w1=0.7`, `w2=0.3`. The locked benchmark set is `cross_stones/cross-stones-10.json`. Pass `--no-speed` for accuracy-only scoring.",
     },
     "st-verdict": {
         "desc": "Generates a stacked bar chart showing the true / partially-true / false verdict breakdown for each AI author across the cross-product fact-check.",
         "after": ["st-cross"],
-        "related": ["st-cross", "st-heatmap", "st-analyze"],
+        "related": ["st-cross", "st-heatmap", "st-analyze", "Ollama"],
         "dev": "Built on `mmd_plot.py`. Data comes from `mmd_data_analysis.get_flattened_fc_data()`.",
     },
     "st-voice": {

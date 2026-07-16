@@ -3,7 +3,7 @@
 Settings manager for Cross: API keys, default AI provider, Discourse connection,
 prompt templates, TTS voice, and editor.
 
-**Related:** [st-new](st-new.md) · [AI Providers](ai-providers.md) · [TTS Audio](tts-audio.md) · [FAQ](faq.md)
+**Related:** [st-new](st-new.md)  [AI Providers](ai-providers.md)  [Ollama](Ollama)  [TTS Audio](tts-audio.md)  [FAQ](faq.md)
 
 ---
 

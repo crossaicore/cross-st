@@ -53,7 +53,7 @@ For simply undoing a mis-selected menu item (before pressing RETURN), use **`Ctr
 | `-q`, `--quiet` | Minimal output |
 | `-v`, `--verbose` | Verbose output |
 
-**Related:** [Onboarding](Onboarding)  [st-new](st-new)  [st-bang](st-bang)  [Command Reference](Home)
+**Related:** [Onboarding](Onboarding)  [st-new](st-new)  [st-bang](st-bang)  [Ollama](Ollama)  [Command Reference](Home)
 
 ---
 

@@ -6,6 +6,8 @@ Reads fact-check data from a container and produces two outputs: a **stacked bar
 
 > **Multi-model (0.9.0+):** when same-make agents author distinct stories in the same container, the chart and `score_authors()` rank each agent as a separate author (Opus and Sonnet rated independently). See [Multi-Model](Multi-Model).
 
+> 💡 **Local models:** any `--agent` here can be a keyless on-device [Ollama](Ollama) agent — nothing leaves your machine.
+
 ![st-verdict workflow](st-verdict-flow.svg)
 
 ## Example output
