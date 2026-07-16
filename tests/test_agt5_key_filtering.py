@@ -73,15 +73,19 @@ class TestListAliasesFilter:
         self, isolated_agent_file, all_keys_unset,
     ):
         rows = _agent_admin.list_agents(filter_by_keys=True)
-        assert rows == []
+        # Ollama is keyless (local/LAN) so it is always available and survives
+        # key-filtering even when no cloud API keys are set; every keyed
+        # provider is dropped.
+        assert {r["agent"] for r in rows} == {"ollama"}
 
     def test_filter_on_keeps_provider_with_key(
         self, isolated_agent_file, all_keys_unset, monkeypatch,
     ):
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
         rows = _agent_admin.list_agents(filter_by_keys=True)
-        assert {r["agent"] for r in rows} == {"openai"}
-        assert rows[0]["has_api_key"] is True
+        # openai (has a key) plus the always-available keyless ollama agent.
+        assert {r["agent"] for r in rows} == {"openai", "ollama"}
+        assert next(r for r in rows if r["agent"] == "openai")["has_api_key"] is True
 
     def test_has_api_key_field_present_on_unfiltered_rows(
         self, isolated_agent_file, all_keys_unset, monkeypatch,
@@ -109,10 +113,11 @@ class TestAgentsMissingKeys:
     ):
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
         missing = _agent_admin.agents_missing_keys()
-        # Every built-in except openai should appear.
+        # Every built-in except openai (has a key) and ollama (keyless — never
+        # reported as missing) should appear.
         makes_missing = {make for _alias, make, _env in missing}
         builtins = set(_agent_admin._builtin_makes())
-        assert makes_missing == builtins - {"openai"}
+        assert makes_missing == builtins - {"openai", "ollama"}
         # Each tuple carries the canonical env-var name.
         for _alias, make, env_var in missing:
             assert env_var.endswith("_API_KEY")

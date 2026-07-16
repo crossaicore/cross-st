@@ -254,3 +254,44 @@ class TestStartupHook:
         # Must NOT raise; output is irrelevant here.
         mmd_startup._migrate_to_agents_v2_once()
 
+
+# ── OLL-CST-1: cross-ai-core==0.10.0 (Ollama) provider pin regression lock ─────
+
+class TestOllamaProviderPin:
+    """OLL-CST-1 — confirms the 0.10.0 dep is in place and that Ollama (the
+    first keyless provider) does not disturb the keyless first-run migration."""
+
+    def test_make_list_includes_ollama(self):
+        from cross_ai_core import get_ai_make_list
+        from cross_ai_core.ai_handler import AI_LIST
+        makes = get_ai_make_list()
+        assert "ollama" in makes
+        assert "ollama" in AI_LIST
+        # Order lock: ollama is appended last; the cloud makes are unchanged.
+        assert makes == ["xai", "anthropic", "openai", "perplexity", "gemini", "ollama"]
+
+    def test_ollama_is_keyless(self):
+        # No API-key env entry → the seeding loop can never pick it up.
+        assert "ollama" not in PROVIDER_API_KEY_ENV
+
+    def test_keyless_migration_never_seeds_ollama(self, isolated_agents_file, monkeypatch):
+        # Even with every cloud key present, ollama must not be auto-seeded —
+        # it is keyless, so users add ollama agents explicitly.
+        for env_names in PROVIDER_API_KEY_ENV.values():
+            monkeypatch.setenv(env_names[0], "k-test")
+        action, names = _agent_admin.migrate_to_agents_v2()
+        assert action == "seeded"
+        assert "ollama" not in names
+        assert set(names) == set(PROVIDER_API_KEY_ENV)  # only keyed providers
+        env = _read_envelope(isolated_agents_file)
+        assert "ollama" not in env["agents"]
+
+    def test_no_keys_still_empty_despite_ollama_registered(self, isolated_agents_file):
+        # Ollama being a registered make must NOT make a keyless first-run
+        # migration believe a provider is available.
+        action, names = _agent_admin.migrate_to_agents_v2()
+        assert action == "empty"
+        assert names == []
+        assert not isolated_agents_file.exists()
+
+

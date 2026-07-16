@@ -399,6 +399,11 @@ class TestMenuDefinition:
 class TestRecommendedModels:
     def test_every_builtin_has_at_least_one_recommendation(self):
         for make in _agent_admin._builtin_makes():
+            # Ollama models are user-installed and discovered live via
+            # OllamaHandler.list_models() (/api/tags), so they are not curated
+            # in RECOMMENDED_MODELS — skip the keyless local provider here.
+            if make == "ollama":
+                continue
             recs = _agent_admin.get_recommended_models(make)
             assert recs, f"no curated recommendations for {make}"
             # At least one is flagged recommended=True (★).

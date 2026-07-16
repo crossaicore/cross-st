@@ -146,7 +146,9 @@ class TestCheckApiKey:
         out = capsys.readouterr().out
         assert ".crossenv" in out or ".env" in out
 
-    @pytest.mark.parametrize("make", get_ai_list())
+    # Ollama is keyless (local/LAN, trusted network) — intentionally absent
+    # from _API_KEY_ENV_VARS, so scope this invariant to the keyed providers.
+    @pytest.mark.parametrize("make", [m for m in get_ai_list() if m != "ollama"])
     def test_every_provider_has_key_var(self, make):
         assert make in _API_KEY_ENV_VARS, (
             f"Provider '{make}' is in AI_LIST but missing from _API_KEY_ENV_VARS. "
