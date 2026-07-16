@@ -473,7 +473,19 @@ def main():
         print(f"Plots created: {file_kv.keys()}")
     # 2. Upload plots to discourse, save url_kv for insertion into the report
     # key is plot type : value is url of the plot
-    url_kv = post_plot(args.site, file_kv, args.verbose)
+    # A failed upload (bad/expired Discourse credentials, network, wrong --site)
+    # must NOT discard the analysis we just generated — degrade gracefully:
+    # warn, skip the plot embed, and continue so the report is still saved.
+    try:
+        url_kv = post_plot(args.site, file_kv, args.verbose)
+    except Exception as exc:
+        url_kv = {}
+        print(f"  Warning: could not upload plots to '{args.site}' — {exc}")
+        print(f"           The analysis was still generated and will be saved "
+              f"without embedded plot images.")
+        print(f"           Fix: verify that site's API key/username "
+              f"(st-admin --discourse), or re-run with --site <site> "
+              f"(e.g. one of: {', '.join(slugs)}).")
 
     # 3. Map from plot:url to tag:md_url
     # The tag is descriptive to help the AI, md_url displays plot in md
@@ -485,11 +497,16 @@ def main():
         cross_bar_score_target_figure_3: bar_score_target
     }
 
-    # Replace the plot type with the plot url
-    # key is the md tag : value is the url of the plot
-    md_kv = tag_mapper(tag_kv, url_kv)
-
-    file_md_content = embed_plot_url(file_md_content, md_kv)
+    if url_kv:
+        # Replace the plot type with the plot url
+        # key is the md tag : value is the url of the plot
+        md_kv = tag_mapper(tag_kv, url_kv)
+        file_md_content = embed_plot_url(file_md_content, md_kv)
+    else:
+        # No uploaded URLs — strip the placeholder plot tags so they don't
+        # appear as literal text in the saved report.
+        for _tag in tag_kv:
+            file_md_content = file_md_content.replace(_tag, "")
     file_md_content += "\n\n" + ai_tag_reading
 
     file_title_content = extract_title(file_txt_content)
