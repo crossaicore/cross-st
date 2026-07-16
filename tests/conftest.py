@@ -113,15 +113,25 @@ def pytest_addoption(parser):
         default=False,
         help="also run @pytest.mark.live tests (real AI calls, cache-friendly)",
     )
+    parser.addoption(
+        "--live-ollama",
+        action="store_true",
+        default=False,
+        help="also run @pytest.mark.ollama tests (local Ollama daemon required)",
+    )
 
 
 def pytest_collection_modifyitems(config, items):
     run_slow = config.getoption("--slow")
     run_live = config.getoption("--live")
+    run_ollama = config.getoption("--live-ollama")
     markexpr = getattr(config.option, "markexpr", "") or ""
 
     skip_slow = pytest.mark.skip(reason="slow test — run with --slow to include")
     skip_live = pytest.mark.skip(reason="live AI test — run with --live to include")
+    skip_ollama = pytest.mark.skip(
+        reason="Ollama live test — run with --live-ollama to include"
+    )
 
     for item in items:
         if "slow" in item.keywords:
@@ -130,6 +140,9 @@ def pytest_collection_modifyitems(config, items):
         if "live" in item.keywords:
             if not run_live and "live" not in markexpr:
                 item.add_marker(skip_live)
+        if "ollama" in item.keywords:
+            if not run_ollama and "ollama" not in markexpr:
+                item.add_marker(skip_ollama)
 
 
 def pytest_configure(config):
@@ -228,5 +241,117 @@ def _seed_legacy_agent_registry(tmp_path_factory, monkeypatch):
     finally:
         _AI_ALIASES.clear()
         _AI_ALIASES.update(saved)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OLL-CST-5 — Ollama daemon lifecycle fixture (@pytest.mark.ollama)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Ownership-aware: reuse a daemon that is already running (never tear it
+# down); only start `ollama serve` ourselves when nothing is listening, and
+# terminate that child on teardown.  Gated behind --live-ollama so CI stays
+# daemon-free.  Uses a *tiny* model (override with CROSS_OLLAMA_TEST_MODEL)
+# so a first-run `ollama pull` is cheap.
+
+_OLLAMA_TAGS_PATH = "/api/tags"
+
+
+def _ollama_base_url() -> str:
+    import os
+    return os.environ.get("OLLAMA_BASE_URL", "").strip() or "http://localhost:11434"
+
+
+def _ollama_reachable(base_url: str, timeout: float = 2.0) -> bool:
+    import urllib.request
+    try:
+        with urllib.request.urlopen(
+            base_url.rstrip("/") + _OLLAMA_TAGS_PATH, timeout=timeout
+        ) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+
+
+def _stop_daemon(proc) -> None:
+    if proc is None:
+        return
+    try:
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except Exception:
+            proc.kill()
+    except Exception:
+        pass
+
+
+@pytest.fixture(scope="session")
+def ollama_daemon(request):
+    """Yield ``{"base_url", "model", "started"}`` for @pytest.mark.ollama tests.
+
+    Contract:
+      1. Probe ``/api/tags`` (~2 s).
+      2. Reachable → **reuse**; never tear it down (ownership tracking).
+      3. Not reachable + ``--live-ollama`` → ``ollama serve`` as a child, poll
+         until healthy (≤30 s), ensure the tiny test model is present (pull if
+         needed), terminate the child on teardown.
+      4. Not runnable (no binary / never healthy / pull fails) → ``skip``.
+    """
+    import os
+    import shutil
+    import subprocess
+    import time
+
+    if not request.config.getoption("--live-ollama"):
+        pytest.skip("Ollama live test — run with --live-ollama")
+
+    base_url = _ollama_base_url()
+    model = os.environ.get("CROSS_OLLAMA_TEST_MODEL", "qwen2.5:0.5b")
+    proc = None
+    started = False
+
+    if not _ollama_reachable(base_url):
+        if shutil.which("ollama") is None:
+            pytest.skip("ollama not reachable and `ollama` binary not found")
+        try:
+            proc = subprocess.Popen(
+                ["ollama", "serve"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception as exc:  # pragma: no cover
+            pytest.skip(f"could not start `ollama serve`: {exc}")
+        started = True
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            if _ollama_reachable(base_url):
+                break
+            time.sleep(0.5)
+        else:
+            _stop_daemon(proc)
+            pytest.skip("ollama daemon did not become healthy within 30 s")
+
+    # Ensure the tiny test model is installed.
+    try:
+        from cross_ai_core.ai_ollama import OllamaHandler
+        installed = OllamaHandler.list_models()
+    except Exception:
+        installed = []
+    family = model.split(":")[0]
+    have = any(t == model or t.split(":")[0] == family for t in installed)
+    if not have:
+        try:
+            subprocess.run(["ollama", "pull", model], check=True, timeout=600)
+        except Exception as exc:
+            if started:
+                _stop_daemon(proc)
+            pytest.skip(f"could not pull test model {model!r}: {exc}")
+
+    try:
+        yield {"base_url": base_url, "model": model, "started": started}
+    finally:
+        if started:
+            _stop_daemon(proc)
+
 
 
