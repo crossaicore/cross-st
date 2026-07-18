@@ -1,4 +1,4 @@
-# corpus_version: 0.11.0
+# corpus_version: 0.12.0
 
 # Cross-st Help Content
 
@@ -404,6 +404,7 @@ A one-line notice prints during startup so you know what happened. The migration
 - [st-admin](st-admin) — interactive agent management UI (`a` → `m` → `a/r/e/R`)
 - [Multi-Model](Multi-Model) — running matrices across multiple agents
 - [ai-providers](ai-providers) — vocabulary: provider vs model vs agent
+- [Ollama](Ollama) — run models **locally / on your LAN** with a keyless agent (private, no API key)
 
 ### Container-Format
 
@@ -663,9 +664,11 @@ New user? Start here: **[Onboarding](Onboarding)** — set up your API keys and 
 - [Showcase Workflows](Showcase-Workflows) — three killer workflows: "Is this fake news?", "What's missing?", "What can I trust?"
 - [Container Format](Container-Format) — anatomy of `subject.json`: `data[]`, `story[]`, `fact[]`, timing
 - [AI Providers](ai-providers) — all 5 providers, models, free vs paid tiers
+- [Ollama](Ollama) — run models **locally / on your LAN**, private and keyless (no API key)
 - [Multi-Model](Multi-Model) — run more than one model per provider via agents (`anthropic-opus` + `anthropic-sonnet` side-by-side)
 - [Agents](Agents) — what an agent is, naming rules, resolution order, and the `--agent` flag (cross-st 0.10.0+)
 - [Cross-Stones Benchmark](cross-stones) — benchmark suite: scoring, domains, leaderboard
+- [Terminal Setup](Terminal-Setup) — rendered output, clickable links, and the recommended terminal (macOS: iTerm2)
 - [FAQ](faq) — common questions and troubleshooting
 
 ---
@@ -678,7 +681,7 @@ pipx install "cross-st[tts]"   # with text-to-speech
 st-admin --setup              # configure API keys → ~/.crossenv
 ```
 
-Source: [github.com/b202i/cross-st](https://github.com/b202i/cross-st)
+Source: [github.com/crossaicore/cross-st](https://github.com/crossaicore/cross-st)
 
 ### Multi-Model
 
@@ -872,9 +875,176 @@ one-off bypass.
 ## See also
 
 - [st-cross](st-cross) — full pipeline that benefits most from agents
+- [Ollama](Ollama) — run agents **locally / on your LAN**, keyless and private (no API key)
 - [ai-providers](ai-providers) — per-provider strengths and per-make `<MAKE>_MODEL` env var docs
 - [Container-Format](Container-Format) — how `make` and `model` are stored on each entry
 - `cross-ai-core` [CHANGELOG `[0.7.0]`](https://github.com/b202i/cross-ai-core/blob/master/CHANGELOG.md) — library-level details
+
+### Ollama
+
+# Ollama (local & private AI)
+
+**Ollama** lets Cross run open-weight models **on your own machine or LAN** instead of a cloud API. It is Cross's first **local** and first **keyless** provider (cross-ai-core 0.10.0+): no API key, no per-token billing, and — on a trusted network — **your prompts and reports never leave your hardware**.
+
+> 🔒 **Privacy:** with an Ollama agent, generation and cross-checking happen entirely on your machine (or a machine you control on your LAN). Nothing is sent to a third-party provider.
+
+Ollama is an **agent** like any other — see **[Agents](Agents)** for the `--agent` flag and **[AI Providers](ai-providers)** for the cloud providers.
+
+---
+
+## 1. Install Ollama + pull a model
+
+```bash
+# macOS
+brew install ollama          # CLI, or install the Ollama.app
+ollama serve &               # start the local daemon (http://localhost:11434)
+ollama pull llama3.1         # download a model (one-time)
+ollama list                  # see installed models
+```
+
+A small model is enough to try it out — e.g. `ollama pull qwen2.5:0.5b` (~0.4 GB) or `ollama pull llama3.2:1b`.
+
+## 2. Add an Ollama agent
+
+**Interactive** (`st-admin` → `a` → `m` → `a`):
+
+```text
+Agent name: ollama-llama
+Provider:   ollama
+Available models for ollama:      ← discovered live from your daemon
+   1.   llama3.1:latest
+   2.   qwen2.5:0.5b
+Choice: 1
+```
+
+If the daemon isn't running (or has no models), the wizard shows the URL it queried and a hint:
+
+```text
+Available models for ollama:
+   (no models found at http://localhost:11434 — is `ollama serve` running?)
+    Pull one first, e.g.:  ollama pull llama3.1
+```
+
+**Non-interactive:**
+
+```bash
+st-admin --add-agent ollama-llama=ollama:llama3.1
+st-admin --add-agent ollama-fast=ollama:qwen2.5:0.5b
+```
+
+## 3. Use it
+
+```bash
+st-gen --agent ollama-llama report.prompt      # generate locally
+st-verdict --agent ollama-llama report.json    # interpret locally
+st-cross --parallel report.json                # include ollama columns in the matrix
+```
+
+Set it as your default so `--agent` is optional:
+
+```bash
+st-admin --set-default-ai ollama-llama
+```
+
+---
+
+## Configuration (environment variables)
+
+Set these in `~/.crossenv` (global) or a project `.env`:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Daemon location — local or a **LAN host** |
+| `OLLAMA_MODEL` | `llama3.1` | Default model when an agent has no explicit model |
+| `OLLAMA_API_TOKEN` | *(none)* | Optional `Authorization: Bearer` token for a reverse-proxied daemon |
+| `OLLAMA_REQUEST_TIMEOUT` | `120` | Generation timeout, seconds |
+| `OLLAMA_HEALTH_CHECK_TIMEOUT` | `5` | Connectivity/discovery probe timeout, seconds |
+| `OLLAMA_MAX_CONCURRENCY` | `2` | Max concurrent local calls in `st-cross`/`st-bang` (see Hardware below) |
+
+Because Ollama is **keyless**, there is no `*_API_KEY` — an Ollama agent is always shown as available in `st-admin`, the `A`-key rotation in `st`, and the `st-cross` matrix.
+
+---
+
+## Remote / LAN Ollama
+
+Run models on a beefier machine (e.g. a Mac Studio) and drive them from a laptop.
+
+**On the host** — bind to all interfaces (Ollama defaults to `localhost` only):
+
+```bash
+OLLAMA_HOST=0.0.0.0:11434 ollama serve
+ollama pull llama3.1
+```
+
+- Allow inbound TCP on **port 11434** through the host's firewall.
+- Use the host's `*.local` name (mDNS/Bonjour on the same subnet) or its static IP.
+
+**On the client** — point Cross at the host:
+
+```ini
+# ~/.crossenv
+OLLAMA_BASE_URL=http://mac-studio.local:11434
+OLLAMA_MODEL=llama3.1
+OLLAMA_HEALTH_CHECK_TIMEOUT=10   # a little more slack over the LAN
+```
+
+**Verify:**
+
+```bash
+ping -c2 mac-studio.local
+curl -s http://mac-studio.local:11434/api/tags   # daemon up + installed models
+```
+
+If `curl` hangs or is refused: the daemon is still bound to localhost, port 11434 is firewalled, or the hostname doesn't resolve.
+
+---
+
+## Hardware & concurrency
+
+Unlike cloud providers (whose limits model an API rate), Ollama's concurrency is bound by your **hardware** (RAM/VRAM). Running several models at once thrashes the machine, so Cross caps concurrent local calls at **2** by default. Tune it per machine:
+
+```ini
+# ~/.crossenv
+OLLAMA_MAX_CONCURRENCY=1     # low-RAM laptop
+OLLAMA_MAX_CONCURRENCY=4     # workstation with plenty of VRAM
+```
+
+- All Ollama agents share **one** rate-limit group, so two local agents (e.g. `ollama-llama` + `ollama-fast`) never exceed the cap together.
+- Override for a single run with `st-cross --max-concurrency N`, or serialise with `st-cross --sequential`.
+
+---
+
+## Multiple local models in one matrix
+
+Define several Ollama agents and cross-examine them side-by-side — or mix local and cloud:
+
+```bash
+st-admin --add-agent ollama-llama=ollama:llama3.1
+st-admin --add-agent ollama-mistral=ollama:mistral
+st-cross --parallel report.json     # both local columns + any cloud agents
+st-speed report.json                # one timing row per agent
+```
+
+---
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| Wizard shows "no models found" | `ollama serve` not running, or `ollama pull <model>` needed |
+| "Cannot reach Ollama at …" | Daemon down, wrong `OLLAMA_BASE_URL`, or firewall blocking 11434 |
+| Timed out after 120 s | Model still loading or host busy — raise `OLLAMA_REQUEST_TIMEOUT` |
+| LAN host unreachable | Start with `OLLAMA_HOST=0.0.0.0`, open port 11434, check `*.local` resolves |
+
+---
+
+## See also
+
+- [Agents](Agents) — the `--agent` flag, naming, resolution order
+- [AI Providers](ai-providers) — the five cloud providers
+- [Multi-Model](Multi-Model) — running matrices across multiple agents
+- [Onboarding](Onboarding) — first-time setup
+- [st-admin](st-admin) — agent management UI
 
 ### Onboarding
 
@@ -883,6 +1053,8 @@ one-off bypass.
 Cross generates research reports using up to 5 AI providers simultaneously, then cross-checks every report against all the others. This page walks you through setup from zero to your first report.
 
 > **Windows users:** see the dedicated [Windows / WSL2](Windows-WSL2) guide.
+
+> 💡 **Tip (macOS):** For the best-looking output and clickable links, we recommend [iTerm2](https://iterm2.com) — `brew install --cask iterm2`. Any modern terminal works fine; see [Terminal Setup](Terminal-Setup).
 
 ---
 
@@ -977,6 +1149,22 @@ Pricing: pay-per-token. Free tier was removed — a small prepaid credit is requ
 Default model: `sonar-pro`
 
 Perplexity Sonar models include **live web search with citations** — useful for current-events reporting. Requires a paid plan or API credits.
+
+---
+
+### 🖥️ Ollama — local & private (no API key)
+
+Prefer to keep everything on your own machine? **Ollama** runs open-weight models locally — **no API key, no per-token cost, and nothing leaves your hardware.**
+
+```bash
+brew install ollama                            # macOS (or install Ollama.app)
+ollama serve &                                 # start the local daemon
+ollama pull llama3.1                           # download a model (one-time)
+st-admin --add-agent ollama-llama=ollama:llama3.1
+st-gen --agent ollama-llama report.prompt
+```
+
+You can also point Cross at a beefier LAN machine. Full guide: **[Ollama](Ollama)**.
 
 ---
 
@@ -1204,6 +1392,65 @@ A 100–160-word caption is usually the right detail level for this lens — lon
 The four lenses are mutually exclusive — pick one per invocation. Run multiple in sequence to get a full picture; chaining is cheap because [st-cross](st-cross)'s fact-check results are already in the container and [st-verdict](st-verdict) only re-reads them.
 
 **Related:** [Three Stages](Three-Stages) · [st-verdict](st-verdict) · [st-fetch](st-fetch) · [st-cross](st-cross) · [Container Format](Container-Format)
+
+### Terminal-Setup
+
+# Terminal Setup — Rendered Output & Clickable Links
+
+Cross renders its AI answers as **styled, easy-to-read output** — headings, bold, bullet lists, syntax-highlighted code, and **clickable links** — in any terminal that supports it. Tools like [st-ask](st-ask) and [st-verdict](st-verdict) use this automatically. Everything still works in a plain terminal; you just get bare text and non-clickable URLs.
+
+This is optional polish, **not** a requirement.
+
+---
+
+## Recommended terminal (macOS): iTerm2
+
+For the nicest experience on macOS — truecolor and clickable links — we recommend [iTerm2](https://iterm2.com):
+
+```bash
+brew install --cask iterm2
+```
+
+Then open **iTerm** and run any Cross command as usual. Links in answers (e.g. wiki pages in a `See also:` block) become clickable.
+
+> The built-in macOS **Terminal.app** shows Cross output fine but does not make links clickable. iTerm2 does.
+
+## Terminals that already work well
+
+Clickable links and colour work out of the box in:
+
+- **iTerm2** (macOS)
+- **VS Code** integrated terminal
+- **WezTerm**, **Kitty**, **Alacritty**
+- **Windows Terminal** (Windows / WSL2 — see [Windows / WSL2](Windows-WSL2))
+- **GNOME Terminal**, **Konsole** (Linux)
+
+No configuration needed — Cross detects the terminal and renders accordingly.
+
+---
+
+## Turning rendering off (raw markdown)
+
+Sometimes you want the raw markdown — to copy-paste, pipe, or save to a file. Cross keeps that easy:
+
+| How | Result |
+|-----|--------|
+| `st-ask --no-render "…"` / `st-verdict --no-render …` | Raw markdown for that run |
+| `st-ask "…" \| pbcopy` (any pipe/redirect) | Raw markdown automatically (rendering only applies to a live terminal) |
+| `:raw` / `:render` in the `st-ask` REPL | Toggle rendering mid-session |
+| `NO_COLOR=1` | Disables rendering (the community-standard env var) |
+| `CROSS_MARKDOWN=off` in `~/.crossenv` | Global kill-switch — never render, everywhere |
+
+So piping and redirecting are **already** raw — you only need `--no-render` when you want raw output in an interactive terminal.
+
+---
+
+## See also
+
+- [st-ask](st-ask) — local help assistant (renders answers)
+- [st-verdict](st-verdict) — verdict chart + AI analysis (renders the written analysis)
+- [Onboarding](Onboarding) — first-time setup
+- [Windows / WSL2](Windows-WSL2) — Windows Terminal setup
 
 ### Three-Stages
 
@@ -1555,6 +1802,8 @@ Cross supports five AI providers simultaneously. Each brings different strengths
 For first-time setup (getting API keys, running `st-admin --setup`), see [Onboarding](Onboarding.md).
 
 > **Multi-model:** since `cross-st 0.9.0` you can also run **more than one model per provider** in the same matrix (e.g. `anthropic-opus` and `anthropic-sonnet` competing side-by-side). See **[Multi-Model](Multi-Model)** for the agent file format.
+
+> **Local & private:** prefer to keep everything on your own hardware? **[Ollama](Ollama)** runs open-weight models locally or on your LAN — no API key, no per-token cost, and nothing leaves your machine.
 
 ---
 
@@ -2147,6 +2396,24 @@ and choose **Default AI**.  The setting is written as `DEFAULT_AGENT=gemini` in
 
 ---
 
+### The answers show raw markdown / the links aren't clickable. Can I fix that?
+
+Cross renders answers as styled markdown with clickable links in a capable
+terminal. On macOS, plain **Terminal.app** doesn't make links clickable —
+install [iTerm2](https://iterm2.com):
+
+```bash
+brew install --cask iterm2
+```
+
+VS Code's integrated terminal, WezTerm, Kitty, Windows Terminal, and most Linux
+terminals already support clickable links. To go the other way and force **raw**
+markdown (for copy-paste), use `--no-render`, pipe the output (piping is raw
+automatically), or set `CROSS_MARKDOWN=off` in `~/.crossenv`. See
+[Terminal Setup](Terminal-Setup).
+
+---
+
 ## Cache
 
 ### What is the cache and why do I want it?
@@ -2319,7 +2586,7 @@ rm -f ~/.crossenv && rm -rf ~/.cross_api_cache/ ~/.cross_templates/ ~/cross-ston
 Settings manager for Cross: API keys, default AI provider, Discourse connection,
 prompt templates, TTS voice, and editor.
 
-**Related:** [st-new](st-new.md) · [AI Providers](ai-providers.md) · [TTS Audio](tts-audio.md) · [FAQ](faq.md)
+**Related:** [st-new](st-new.md)  [AI Providers](ai-providers.md)  [Ollama](Ollama)  [TTS Audio](tts-audio.md)  [FAQ](faq.md)
 
 ---
 
@@ -2797,6 +3064,8 @@ Generates a narrative summary of the cross-product fact-check results — who sc
 
 **Run after:** `st-cross`
 
+> 💡 **Local models:** any `--agent` here can be a keyless on-device [Ollama](Ollama) agent — nothing leaves your machine.
+
 ---
 
 ## Examples
@@ -2839,6 +3108,58 @@ st-analyze --ai-story subject.json      # full AI narrative from analysis
 
 Flattens `fact[]` entries via `mmd_data_analysis.get_flattened_fc_data()` and passes the structured data to an AI for a prose summary.
 
+### st-ask
+
+# st-ask — Local FAQ Help (Pseudo-AI)
+
+`st-ask` provides instant, local help for common Cross questions — no API key required. It matches your question to a built-in FAQ using semantic and fuzzy search. For full LLM-powered answers, add an API key with `st-admin --setup`.
+
+## Usage
+
+- `st-ask "How do I install cross-st?"` — one-shot answer
+- `st-ask` — interactive REPL
+
+## Rendered output
+
+Answers are shown as **rendered markdown** — styled headings, lists, code, and clickable links — when you run `st-ask` in a capable terminal. Piped or redirected output (e.g. `st-ask "…" | pbcopy`) stays **raw markdown** so it's easy to copy and reuse.
+
+| Flag / command | Effect |
+|----------------|--------|
+| `--no-render` | Print raw markdown instead of styled output |
+| `:raw` / `:render` (in the REPL) | Toggle rendering mid-session |
+
+For clickable links, see [Terminal Setup](Terminal-Setup) (macOS: `brew install --cask iterm2`). Set `CROSS_MARKDOWN=off` in `~/.crossenv` to disable rendering everywhere.
+
+## Feedback & telemetry (opt-in)
+
+If you have opted in to anonymous usage telemetry (`st-admin --ask-telemetry on`), `st-ask` shows a one-keystroke **thumb-up/down** prompt after each answer:
+
+```
+  Was this helpful? [y/n, Enter to skip]:
+```
+
+It's always skippable (press Enter) and never blocks. The result feeds the anonymous, scrubbed telemetry event that helps prioritise FAQ improvements — no personal data, API keys, or paths are ever sent. Telemetry stays **off** until you opt in.
+
+| Flag | Effect |
+|------|--------|
+| `--no-feedback` | Skip the post-answer thumb-up/down prompt |
+
+The prompt only appears when telemetry is enabled **and** you're in an interactive terminal; it's automatically silent when piped or scripted.
+
+## Features
+- No API key required
+- Local, privacy-preserving
+- Suggests Discourse/GitHub links if no match
+- Redacts secrets/paths in error breadcrumbs
+
+## Escape Hatches
+- [Cross Community (Discourse)](https://crossai.dev)
+- [GitHub Issues](https://github.com/crossaicore/cross-st/issues)
+
+---
+
+(local lookup — for full answers add an AI key with 'st-admin --setup')
+
 ### st-bang
 
 # st-bang — Run all AI providers in parallel and merge results
@@ -2846,6 +3167,8 @@ Flattens `fact[]` entries via `mmd_data_analysis.get_flattened_fc_data()` and pa
 Generates stories from all AI providers simultaneously, then merges them into one container. Much faster than running `st-gen` once per provider.
 
 **Run after:** `st-new`    **Run before:** `st-cross`  `st-merge`
+
+> 💡 **Local models:** any `--agent` here can be a keyless on-device [Ollama](Ollama) agent — nothing leaves your machine.
 
 ---
 
@@ -2939,7 +3262,7 @@ Runs the full research pipeline in one command: generates a report from every AI
 
 **Run after:** `st-new`    **Run before:** `st-merge`  `st-heatmap`  `st-verdict`  `st-analyze`
 
-**Related:** [st-bang](st-bang)  [st-fact](st-fact)  [st-heatmap](st-heatmap)  [st-verdict](st-verdict)  [Multi-Model](Multi-Model)
+**Related:** [st-bang](st-bang)  [st-fact](st-fact)  [st-heatmap](st-heatmap)  [st-verdict](st-verdict)  [Multi-Model](Multi-Model)  [Ollama](Ollama)
 
 > **Multi-model (0.9.0+):** `--agent` accepts agents defined in `~/.cross_ai_models.json` — e.g. `--agent anthropic-opus` runs Opus alongside the bare `--agent anthropic` default. Same-make agents share one rate-limit semaphore. See [Multi-Model](Multi-Model).
 
@@ -2998,7 +3321,7 @@ Step 1 runs `st-gen --bang` per AI in parallel processes, each writing to its ow
 
 Guides you through building a `.prompt` file for a new [Cross-Stones](cross-stones.md) benchmark domain. The prompt tells every AI exactly what 10 fact-checkable claims to generate — the controlled input that makes benchmark scores comparable across time.
 
-**Related:** [st-stones](st-stones.md) · [st-cross](st-cross.md) · [Cross-Stones](cross-stones.md)
+**Related:** [st-stones](st-stones.md)  [st-cross](st-cross.md)  [Cross-Stones](cross-stones.md)  [Ollama](Ollama)
 
 ---
 
@@ -3184,6 +3507,8 @@ Reads the targeted field from the `story[]` array, writes it to a temp file, ope
 Sends a single story to an AI and asks it to fact-check every claim, scoring each one true, partially true, or false. Appends the result to the container.
 
 **Run after:** `st-prep`    **Run before:** `st-verdict`  `st-fix`  `st-heatmap`  `st-cross`
+
+> 💡 **Local models:** any `--agent` here can be a keyless on-device [Ollama](Ollama) agent — nothing leaves your machine.
 
 ![st-fact workflow](st-fact-flow.svg)
 
@@ -3525,7 +3850,7 @@ exactly as the AI wrote it.
 
 **Run after:** `st-fact`    **Run before:** `st-post`
 
-**Related:** [st-fact](st-fact.md)  [st-merge](st-merge.md)  [st-post](st-post.md)  [Multi-Model](Multi-Model)
+**Related:** [st-fact](st-fact.md)  [st-merge](st-merge.md)  [st-post](st-post.md)  [Multi-Model](Multi-Model)  [Ollama](Ollama)
 
 > **Multi-model (0.9.0+):** when `--agent` is omitted, `st-fix` defaults the rewriter to the agent whose `(make, model)` matches the source story — an Opus-authored story is rewritten by Opus, not by the bare `anthropic` handler default. See [Multi-Model](Multi-Model).
 
@@ -3650,7 +3975,7 @@ st-gen --no-prep subject.prompt         # store raw data only, skip st-prep
 | `-v`, `--verbose` | Verbose output |
 | `-q`, `--quiet` | Minimal output |
 
-**Related:** [st-bang](st-bang) · [st-prep](st-prep) · [AI Providers](ai-providers)
+**Related:** [st-bang](st-bang)  [st-prep](st-prep)  [AI Providers](ai-providers)  [Ollama](Ollama)
 
 ---
 
@@ -3667,6 +3992,8 @@ fact-check. **Rows** are evaluator AIs; **columns** are target story authors.
 Darker cells = higher veracity scores. The diagonal shows self-evaluation scores.
 
 **Run after:** `st-cross`
+
+> 💡 **Local models:** any `--agent` here can be a keyless on-device [Ollama](Ollama) agent — nothing leaves your machine.
 
 ## Examples
 
@@ -3888,7 +4215,7 @@ Combines multiple AI-generated stories into one cohesive report. When fact-check
 
 **Run after:** `st-bang`    **Run before:** `st-post`
 
-**Related:** [st-bang](st-bang)  [st-fix](st-fix)  [st-post](st-post)
+**Related:** [st-bang](st-bang)  [st-fix](st-fix)  [st-post](st-post)  [Ollama](Ollama)
 
 ---
 
@@ -3949,7 +4276,9 @@ Two modes selected automatically: `simple` (no fact data — all stories passed 
 
 Creates a fresh prompt file from a template and opens your editor so you can fill in the topic. The starting point for every new research report.
 
-**Run before:** `st-gen` · `st-bang`
+**Run before:** `st-gen`  `st-bang`
+
+> 💡 **Local models:** the `--agent`/`--gen` flow can target a keyless on-device [Ollama](Ollama) agent — nothing leaves your machine.
 
 ## Examples
 
@@ -3978,6 +4307,8 @@ Template resolution order: `./template/` (CWD) → `~/.cross_templates/` → `<s
 Generates charts from cross-product data: score distributions, AI comparisons, and timing breakdowns. Displays in the browser or saves to files.
 
 **Run after:** `st-cross`
+
+> 💡 **Local models:** any `--agent` here can be a keyless on-device [Ollama](Ollama) agent — nothing leaves your machine.
 
 ---
 
@@ -4290,7 +4621,7 @@ fact-checking throughput, and consistency. Useful for choosing a provider when s
 
 **Run after:** `st-bang`  `st-cross`
 
-**Related:** [st-stones](st-stones)  [st-cross](st-cross)  [st-heatmap](st-heatmap)  [Multi-Model](Multi-Model)
+**Related:** [st-stones](st-stones)  [st-cross](st-cross)  [st-heatmap](st-heatmap)  [Multi-Model](Multi-Model)  [Ollama](Ollama)
 
 > **Multi-model (0.9.0+):** when same-make agents (e.g. `anthropic-opus` and `anthropic-sonnet`) appear in a container, `st-speed` shows one row per agent with `make:model` labels for disambiguation. See [Multi-Model](Multi-Model).
 
@@ -4447,7 +4778,7 @@ Scores AI providers on the Cross-Stones benchmark: a fixed set of domain prompts
 
 **Run after:** `st-cross`
 
-**Related:** [st-domain](st-domain)  [st-speed](st-speed)  [Cross-Stones](cross-stones)
+**Related:** [st-domain](st-domain)  [st-speed](st-speed)  [Cross-Stones](cross-stones)  [Ollama](Ollama)
 
 ---
 
@@ -4526,6 +4857,8 @@ Reads fact-check data from a container and produces two outputs: a **stacked bar
 
 > **Multi-model (0.9.0+):** when same-make agents author distinct stories in the same container, the chart and `score_authors()` rank each agent as a separate author (Opus and Sonnet rated independently). See [Multi-Model](Multi-Model).
 
+> 💡 **Local models:** any `--agent` here can be a keyless on-device [Ollama](Ollama) agent — nothing leaves your machine.
+
 ![st-verdict workflow](st-verdict-flow.svg)
 
 ## Example output
@@ -4547,6 +4880,7 @@ Reads fact-check data from a container and produces two outputs: a **stacked bar
 | `--no-cache` | Disable API cache |
 | `-v`, `--verbose` | Verbose output |
 | `-q`, `--quiet` | Minimal output |
+| `--no-render` | Print raw markdown for the AI analysis instead of rendered (styled) output |
 
 ### Chart output
 
@@ -4568,6 +4902,8 @@ Reads fact-check data from a container and produces two outputs: a **stacked bar
 | `--ai-summary` | Generate a 120–200-word summary → stdout |
 | `--ai-story` | Generate an 800–1200-word narrative → stdout |
 | `--agent AI` | AI provider for content generation (default: `xai`) |
+
+> The written analysis is shown as **rendered markdown** (styled, clickable links) in a capable terminal; piped/redirected output stays raw. Use `--no-render` for raw markdown, or set `CROSS_MARKDOWN=off` in `~/.crossenv` to disable rendering everywhere. See [Terminal Setup](Terminal-Setup).
 
 ### What-is lens — focused claim breakdown
 
@@ -4735,7 +5071,7 @@ For simply undoing a mis-selected menu item (before pressing RETURN), use **`Ctr
 | `-q`, `--quiet` | Minimal output |
 | `-v`, `--verbose` | Verbose output |
 
-**Related:** [Onboarding](Onboarding)  [st-new](st-new)  [st-bang](st-bang)  [Command Reference](Home)
+**Related:** [Onboarding](Onboarding)  [st-new](st-new)  [st-bang](st-bang)  [Ollama](Ollama)  [Command Reference](Home)
 
 ---
 
@@ -5038,6 +5374,52 @@ Cross uses [Semantic Versioning](https://semver.org/).
 ---
 
 ## [Unreleased]
+
+---
+
+## [0.12.0] — 2026-07-18  *(st-ask + AGT-9 shim removal)*
+
+> Paired with `cross-ai-core 0.11.0` (which removed the `cross_ai_core.aliases`
+> module shim). This cut also completes the AGT-9 cleanup on the cross-st side.
+> **Breaking:** the one-release pre-AGT-9 back-compat surface is gone — see
+> *Removed* below. Anything using `--agent` / `cross_st._agent_admin` is
+> unaffected.
+
+### Added
+- **`st-ask` — local help assistant** (new 30th entry point). Runs in two
+  tiers: **Pseudo-AI** (no API key — deterministic FAQ matcher over
+  `support_faq.md`) and **Full LLM** (≥ 1 key — routes your question to
+  `DEFAULT_AGENT`/`ASK_AGENT`/`--agent` with the `support_content.md` corpus
+  as system prompt, citing only from the reference and ending every answer
+  with a `See also:` block). One-shot (`st-ask "…"`) or bare REPL.
+  `--explain-last-error` reads the scrubbed error breadcrumb from
+  `~/.cross_api_cache/last_error.json` and explains it. `--pseudo` forces the
+  local tier even when a key is present.
+- Error breadcrumbs: `ai_error_handler.write_error_breadcrumb()` records the
+  last 5 errors (path/secret-scrubbed at write time) for `--explain-last-error`.
+- Runtime deps `scikit-learn>=1.0.0` + `rapidfuzz>=3.0.0` (Pseudo-AI matcher;
+  auto-installed on first use).
+- **`st-ask` opt-in telemetry & feedback** (ASK-16/17/18). Anonymous, **off by
+  default**; enable with `st-admin --ask-telemetry on` or the one-time first-run
+  consent prompt. Collects only the scrubbed question, tier, match/no-match, and
+  (new) an optional post-answer **thumb-up/down** (`Was this helpful?`). The
+  prompt is skippable, appears only in an interactive terminal, and can be
+  disabled per-invocation with `st-ask --no-feedback`. No usernames, API keys,
+  or paths are ever sent. The signal drives the FAQ backfill queue surfaced in
+  the crossai.dev admin portal (`/crossai-admin/ask`).
+
+### Removed
+- **AGT-9 back-compat surface** (deprecated in 0.11.0, one-release grace ended):
+  - `cross_st._alias_admin` module shim → use `cross_st._agent_admin`.
+  - Legacy symbol aliases in `_agent_admin` (`add_alias`, `remove_alias`,
+    `list_aliases`, `edit_alias_model`, `read_alias_file`, `write_alias_file`,
+    `aliases_file_path`, `format_alias_table`, `AliasError`) → use the
+    `*_agent` / `*_agents` spellings.
+  - Hidden `st-admin` CLI flags `--add-alias` / `--remove-alias` /
+    `--list-aliases` → use `--add-agent` / `--remove-agent` / `--list-agents`.
+
+### Changed
+- Minimum `cross-ai-core` bumped to **`[all]>=0.11.0`**.
 
 ---
 
