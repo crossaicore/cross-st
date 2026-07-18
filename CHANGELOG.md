@@ -9,6 +9,16 @@ Cross uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+---
+
+## [0.12.0] — 2026-07-18  *(st-ask + AGT-9 shim removal)*
+
+> Paired with `cross-ai-core 0.11.0` (which removed the `cross_ai_core.aliases`
+> module shim). This cut also completes the AGT-9 cleanup on the cross-st side.
+> **Breaking:** the one-release pre-AGT-9 back-compat surface is gone — see
+> *Removed* below. Anything using `--agent` / `cross_st._agent_admin` is
+> unaffected.
+
 ### Added
 - **`st-ask` — local help assistant** (new 30th entry point). Runs in two
   tiers: **Pseudo-AI** (no API key — deterministic FAQ matcher over
@@ -31,6 +41,19 @@ Cross uses [Semantic Versioning](https://semver.org/).
   disabled per-invocation with `st-ask --no-feedback`. No usernames, API keys,
   or paths are ever sent. The signal drives the FAQ backfill queue surfaced in
   the crossai.dev admin portal (`/crossai-admin/ask`).
+
+### Removed
+- **AGT-9 back-compat surface** (deprecated in 0.11.0, one-release grace ended):
+  - `cross_st._alias_admin` module shim → use `cross_st._agent_admin`.
+  - Legacy symbol aliases in `_agent_admin` (`add_alias`, `remove_alias`,
+    `list_aliases`, `edit_alias_model`, `read_alias_file`, `write_alias_file`,
+    `aliases_file_path`, `format_alias_table`, `AliasError`) → use the
+    `*_agent` / `*_agents` spellings.
+  - Hidden `st-admin` CLI flags `--add-alias` / `--remove-alias` /
+    `--list-aliases` → use `--add-agent` / `--remove-agent` / `--list-agents`.
+
+### Changed
+- Minimum `cross-ai-core` bumped to **`[all]>=0.11.0`**.
 
 ---
 

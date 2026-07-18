@@ -2668,21 +2668,6 @@ def main() -> None:
         "--list-agents", action="store_true",
         help="Print the agent registry (one row per loaded agent)",
     )
-    # Hidden back-compat aliases for the pre-AGT-9 flag spellings.  These
-    # share dest=add_agent / remove_agent / list_agents so existing scripts
-    # keep working unmodified for one release.  Removed in 0.12.0.
-    parser.add_argument(
-        "--add-alias", dest="add_agent", metavar="NAME=MAKE[:MODEL]",
-        help=argparse.SUPPRESS,
-    )
-    parser.add_argument(
-        "--remove-alias", dest="remove_agent", metavar="NAME",
-        help=argparse.SUPPRESS,
-    )
-    parser.add_argument(
-        "--list-aliases", dest="list_agents", action="store_true",
-        help=argparse.SUPPRESS,
-    )
     parser.add_argument(
         "--set-tts-voice", metavar="VOICE",
         help="Set the TTS voice string (written to TTS_VOICE in .env)",

@@ -862,18 +862,3 @@ def format_agent_table(rows: "Iterable[dict]") -> str:
         lines.append(fmt.format(*c))
     return "\n".join(lines)
 
-# ── Back-compat aliases (deprecated, removed in cross-st 0.12.0) ─────────────
-# Re-export the renamed symbols under their pre-AGT-9 names so callers
-# that still import them keep working for one release.  The submodule
-# ``cross_st._alias_admin`` (legacy module path) emits a
-# DeprecationWarning on import; importing these names from
-# ``cross_st._agent_admin`` directly is silent — the warning is path-based.
-aliases_file_path = agents_file_path
-read_alias_file = read_agents_file
-write_alias_file = write_agents_file
-add_alias = add_agent
-remove_alias = remove_agent
-edit_alias_model = edit_agent_model
-list_aliases = list_agents
-format_alias_table = format_agent_table
-AliasError = AgentError
