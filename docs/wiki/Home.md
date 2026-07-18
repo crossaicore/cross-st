@@ -19,6 +19,7 @@ New user? Start here: **[Onboarding](Onboarding)** — set up your API keys and 
 | [st](st) | Interactive menu — launch any command from a numbered list |
 | [st-admin](st-admin) | Settings manager: DEFAULT_AGENT, model overrides, TTS voice, editor |
 | [st-analyze](st-analyze) | AI-powered analysis of cross-product fact-check data |
+| [st-ask](st-ask) | Local FAQ help assistant — no API key required |
 | [st-bang](st-bang) | Parallel report generation — run all AIs at once |
 | [st-cat](st-cat) | Print story fields to stdout (pipe-friendly) |
 | [st-cross](st-cross) | Cross-product: generate N stories × fact-check with N AIs |
