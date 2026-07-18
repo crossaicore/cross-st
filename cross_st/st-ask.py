@@ -11,6 +11,7 @@ from cross_st import ai_handler
 from cross_st import ai_error_handler
 from cross_st import mmd_startup
 from cross_st import _markdown
+from cross_st import _ask_telemetry
 
 
 # ── Escape-hatch links (shown on every Full-LLM answer, per st-ask.md §1) ──
@@ -203,13 +204,64 @@ def _pseudo_answer(query, render_pref=None):
     matches = find_matches(query, _FAQ, top_k=3)
     if matches and matches[0]['_score'] > 0.6:
         _print_answer(matches[0], render_pref)
+        _ask_telemetry.send_event(scrub(query), tier="pseudo", matched=True)
     elif matches and matches[0]['_score'] > 0.3:
         print("\nDid you mean:")
         for m in matches:
             print(f"  - {m['question']}")
         _markdown.print_muted(f"\n{FOOTER}", render=render_pref)
+        _ask_telemetry.send_event(scrub(query), tier="pseudo", matched=False)
     else:
         _print_no_match(render_pref)
+        _ask_telemetry.send_event(scrub(query), tier="pseudo", matched=False)
+
+
+def _maybe_prompt_telemetry_consent() -> None:
+    """First-run consent prompt for opt-in ask-telemetry (ASK-17).
+
+    Shown once the first time ``st-ask`` is run in an interactive terminal,
+    and only when the user has not already made a choice.  Writing the key
+    goes through ``st-admin``'s ``_env_set`` equivalent (``dotenv.set_key``)
+    so it lands in the correct config file — same pattern as TOS acceptance.
+
+    Conditions for showing:
+      - CROSS_ASK_TELEMETRY is unset (not "on" or "off") → user hasn't chosen
+      - sys.stdin.isatty() — never prompt in a pipe / CI / script context
+    """
+    existing = os.getenv("CROSS_ASK_TELEMETRY", "").strip().lower()
+    if existing in ("on", "off"):
+        return  # already decided
+    if not sys.stdin.isatty():
+        return  # piped / scripted — silently stay off
+
+    print(
+        "\n  st-ask can send anonymous usage data to help improve the FAQ.\n"
+        "  No personal information, API keys, or paths are ever included —\n"
+        "  only your question text (scrubbed) and whether an answer was found.\n"
+        "  You can change this at any time with: st-admin --ask-telemetry on|off\n"
+    )
+    try:
+        choice = input("  Enable usage telemetry? [y/N]: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        choice = "n"
+
+    value = "on" if choice == "y" else "off"
+
+    # Write to the active config file (same logic as st-admin _env_set)
+    try:
+        from dotenv import set_key
+        crossenv = os.path.expanduser("~/.crossenv")
+        set_key(crossenv, "CROSS_ASK_TELEMETRY", value)
+        os.environ["CROSS_ASK_TELEMETRY"] = value
+    except Exception:
+        pass  # if write fails, default stays off — never fatal
+
+    if value == "on":
+        print("  ✓  Telemetry enabled. Thank you! Disable any time with: st-admin --ask-telemetry off")
+    else:
+        print("  Telemetry off. Enable any time with: st-admin --ask-telemetry on")
+    print()
 
 def main():
     # Load ~/.crossenv + project .env layers so API keys and DEFAULT_AGENT are
@@ -217,6 +269,10 @@ def main():
     # st-man) so it can run before setup — but it still must load the env
     # layers to decide between the Pseudo-AI and Full-LLM tiers.
     mmd_startup.load_cross_env()
+
+    # ASK-17: first-run consent prompt (shown once, interactive TTY only)
+    _maybe_prompt_telemetry_consent()
+
     parser = argparse.ArgumentParser()
     parser.add_argument("question", nargs="*", help="Ask a question")
     parser.add_argument("--agent", help="Agent name to use for LLM tier")
@@ -251,6 +307,9 @@ def main():
         if args.question:
             user_query = " ".join(args.question)
             _llm_answer(agent, user_query, system_prompt, render_pref)
+            _ask_telemetry.send_event(
+                scrub(user_query), tier="llm", matched=True, agent=agent
+            )
             return 0
         # REPL for LLM tier
         print("st-ask (LLM): Type your question, :raw/:render to toggle rendering, or :quit to exit.")
@@ -270,6 +329,9 @@ def main():
                 print("  Rendering on.")
                 continue
             _llm_answer(agent, q, system_prompt, render_pref)
+            _ask_telemetry.send_event(
+                scrub(q), tier="llm", matched=True, agent=agent
+            )
         return 0
     # Pseudo-AI tier
     if args.question:

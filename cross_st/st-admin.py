@@ -29,6 +29,7 @@ Non-interactive (scripting / shell):
   st-admin --cache-clear          # delete all cached AI responses
   st-admin --cache-cull DAYS      # delete cache entries older than DAYS days
   st-admin --check-tos            # check T&C acceptance; prompt re-acceptance if stale
+  st-admin --ask-telemetry on|off # enable or disable st-ask anonymous usage telemetry
 
 Settings are persisted in:
   ~/.crossenv   — DEFAULT_AGENT, TTS_VOICE, DEFAULT_TEMPLATE, EDITOR, API keys
@@ -2634,6 +2635,10 @@ def main() -> None:
         help="Check whether the stored T&C version is current; prompt re-acceptance if stale",
     )
     parser.add_argument(
+        "--ask-telemetry", metavar="on|off",
+        help="Enable or disable anonymous st-ask usage telemetry (default off)",
+    )
+    parser.add_argument(
         "--show", action="store_true",
         help="Print all current settings and exit",
     )
@@ -2732,6 +2737,21 @@ def main() -> None:
 
     if args.check_tos:
         check_tos_flag()
+        return
+
+    if args.ask_telemetry is not None:
+        val = args.ask_telemetry.strip().lower()
+        if val not in ("on", "off"):
+            print(
+                "✗  Expected 'on' or 'off' (e.g. st-admin --ask-telemetry on)",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        _env_set("CROSS_ASK_TELEMETRY", val)
+        if val == "on":
+            print("✓  st-ask telemetry enabled.  Anonymous query data will be sent to crossai.dev.")
+        else:
+            print("✓  st-ask telemetry disabled.  No data will be sent.")
         return
 
     if args.show:

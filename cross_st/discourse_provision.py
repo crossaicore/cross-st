@@ -55,6 +55,12 @@ _TOS_ACCEPTANCE_ENDPOINT = os.getenv(
     "https://crossai.dev/api/record-tos-acceptance",
 )
 
+# Ask-telemetry endpoint (ASK-16) — override via CROSS_ASK_TELEMETRY_URL
+ASK_TELEMETRY_ENDPOINT = os.getenv(
+    "CROSS_ASK_TELEMETRY_URL",
+    "https://crossai.dev/api/ask-telemetry",
+)
+
 # ── Terms & Conditions ───────────────────────────────────────────────────────
 
 _TOS_VERSIONS_PATH = Path(__file__).parent / "data" / "tos_versions.json"
