@@ -19,6 +19,7 @@ Payload schema
   "tier":       "pseudo"|"llm",
   "matched":    bool,         # True = an FAQ entry was returned; False = no-match
   "agent":      str|null,     # LLM tier only; null for pseudo
+  "helpful":    bool|null,    # ASK-18 thumb-up/down; null = skipped / not asked
   "cross_st_version": str,    # e.g. "0.12.0"
   "ts":         str           # ISO-8601 UTC
 }
@@ -57,6 +58,7 @@ def send_event(
     tier: str,
     matched: bool,
     agent: "str | None" = None,
+    helpful: "bool | None" = None,
 ) -> None:
     """Post a single telemetry event in a background thread.
 
@@ -68,6 +70,8 @@ def send_event(
         tier:    "pseudo" or "llm".
         matched: True if an answer was returned, False for a no-match result.
         agent:   The agent name used (LLM tier only); None for pseudo.
+        helpful: Post-answer thumb-up/down (ASK-18). True/False when the user
+                 answered the feedback prompt; None when skipped or not asked.
     """
     if not is_enabled():
         return
@@ -92,6 +96,7 @@ def send_event(
             "tier":               tier,
             "matched":            matched,
             "agent":              agent,
+            "helpful":            helpful,
             "cross_st_version":   cs_version,
             "ts":                 datetime.now(timezone.utc).isoformat(),
         }

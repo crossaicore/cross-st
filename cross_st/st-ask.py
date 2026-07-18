@@ -103,6 +103,53 @@ _FAQ = [
 
 FOOTER = "(local lookup — for full answers add an AI key with 'st-admin --setup')"
 
+# ASK-18: post-answer feedback prompt toggle. Disabled with --no-feedback.
+_FEEDBACK_ENABLED = True
+
+
+def _maybe_prompt_feedback(render_pref=None):
+    """Post-answer one-keystroke thumb-up/down (ASK-18).
+
+    Only shown when telemetry is opted-in AND we're on an interactive TTY AND
+    feedback has not been disabled with ``--no-feedback``.  Always skippable —
+    pressing Enter (or anything other than y/n) records no opinion.
+
+    Returns:
+        True  — user found the answer helpful,
+        False — user found it unhelpful,
+        None  — skipped / not asked (default; never blocks the flow).
+    """
+    if not _FEEDBACK_ENABLED:
+        return None
+    if not _ask_telemetry.is_enabled():
+        return None
+    if not sys.stdin.isatty():
+        return None
+    try:
+        choice = input("  Was this helpful? [y/n, Enter to skip]: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return None
+    if choice in ("y", "yes"):
+        return True
+    if choice in ("n", "no"):
+        return False
+    return None
+
+
+def _report(scrubbed_query, tier, matched, agent=None, feedback=True,
+            render_pref=None):
+    """Collect optional thumb-up/down feedback and emit one telemetry event.
+
+    ``feedback`` is only meaningful for a real answer (``matched`` True); a
+    no-match / did-you-mean menu has nothing to rate, so it passes
+    ``feedback=False`` and records ``helpful=None``.
+    """
+    helpful = _maybe_prompt_feedback(render_pref) if (feedback and matched) else None
+    _ask_telemetry.send_event(
+        scrubbed_query, tier=tier, matched=matched, agent=agent, helpful=helpful
+    )
+
 
 def _has_api_key():
     # Minimal: check for any known API key env var
@@ -204,16 +251,18 @@ def _pseudo_answer(query, render_pref=None):
     matches = find_matches(query, _FAQ, top_k=3)
     if matches and matches[0]['_score'] > 0.6:
         _print_answer(matches[0], render_pref)
-        _ask_telemetry.send_event(scrub(query), tier="pseudo", matched=True)
+        _report(scrub(query), tier="pseudo", matched=True, render_pref=render_pref)
     elif matches and matches[0]['_score'] > 0.3:
         print("\nDid you mean:")
         for m in matches:
             print(f"  - {m['question']}")
         _markdown.print_muted(f"\n{FOOTER}", render=render_pref)
-        _ask_telemetry.send_event(scrub(query), tier="pseudo", matched=False)
+        _report(scrub(query), tier="pseudo", matched=False, feedback=False,
+                render_pref=render_pref)
     else:
         _print_no_match(render_pref)
-        _ask_telemetry.send_event(scrub(query), tier="pseudo", matched=False)
+        _report(scrub(query), tier="pseudo", matched=False, feedback=False,
+                render_pref=render_pref)
 
 
 def _maybe_prompt_telemetry_consent() -> None:
@@ -279,7 +328,12 @@ def main():
     parser.add_argument("--pseudo", action="store_true", help="Force Pseudo-AI tier even if API key present")
     parser.add_argument("--explain-last-error", action="store_true", help="Explain the last error using the LLM tier")
     parser.add_argument("--no-render", action="store_true", help="Print raw markdown instead of rendered (styled) output")
+    parser.add_argument("--no-feedback", action="store_true", help="Skip the post-answer thumb-up/down feedback prompt")
     args = parser.parse_args()
+
+    # ASK-18: honour --no-feedback for the post-answer thumb-up/down prompt.
+    global _FEEDBACK_ENABLED
+    _FEEDBACK_ENABLED = not args.no_feedback
 
     # Rendering preference: None = smart default (on in a TTY, raw when piped);
     # False = forced raw via --no-render.
@@ -307,8 +361,9 @@ def main():
         if args.question:
             user_query = " ".join(args.question)
             _llm_answer(agent, user_query, system_prompt, render_pref)
-            _ask_telemetry.send_event(
-                scrub(user_query), tier="llm", matched=True, agent=agent
+            _report(
+                scrub(user_query), tier="llm", matched=True, agent=agent,
+                render_pref=render_pref,
             )
             return 0
         # REPL for LLM tier
@@ -329,8 +384,9 @@ def main():
                 print("  Rendering on.")
                 continue
             _llm_answer(agent, q, system_prompt, render_pref)
-            _ask_telemetry.send_event(
-                scrub(q), tier="llm", matched=True, agent=agent
+            _report(
+                scrub(q), tier="llm", matched=True, agent=agent,
+                render_pref=render_pref,
             )
         return 0
     # Pseudo-AI tier

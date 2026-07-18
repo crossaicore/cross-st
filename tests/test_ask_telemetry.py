@@ -280,3 +280,145 @@ class TestAdminAskTelemetryFlag:
         assert "disabled" in result.stdout.lower()
 
 
+# ── ASK-18: helpful field in the telemetry payload ────────────────────────────
+
+class TestHelpfulField:
+    def _capture_payload(self, fn):
+        """Run fn() with requests.post patched; return the single posted payload."""
+        posted = []
+
+        def fake_post(url, json=None, **kw):
+            posted.append(json)
+            return MagicMock(status_code=201)
+
+        with patch("requests.post", side_effect=fake_post):
+            fn()
+            time.sleep(0.2)
+        assert len(posted) == 1
+        return posted[0]
+
+    def test_helpful_defaults_to_none(self, monkeypatch):
+        monkeypatch.setenv("CROSS_ASK_TELEMETRY", "on")
+        p = self._capture_payload(lambda: telemetry.send_event("q", "pseudo", True))
+        assert "helpful" in p
+        assert p["helpful"] is None
+
+    def test_helpful_true(self, monkeypatch):
+        monkeypatch.setenv("CROSS_ASK_TELEMETRY", "on")
+        p = self._capture_payload(
+            lambda: telemetry.send_event("q", "pseudo", True, helpful=True)
+        )
+        assert p["helpful"] is True
+
+    def test_helpful_false(self, monkeypatch):
+        monkeypatch.setenv("CROSS_ASK_TELEMETRY", "on")
+        p = self._capture_payload(
+            lambda: telemetry.send_event("q", "llm", True, agent="a", helpful=False)
+        )
+        assert p["helpful"] is False
+
+
+# ── ASK-18: post-answer feedback prompt (_maybe_prompt_feedback) ──────────────
+
+class TestFeedbackPrompt:
+    def _load_st_ask(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "st_ask_feedback_under_test",
+            Path(_CROSS_ST) / "st-ask.py",
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_no_prompt_when_telemetry_off(self, monkeypatch):
+        """Feedback is never solicited when telemetry is disabled."""
+        monkeypatch.setenv("CROSS_ASK_TELEMETRY", "off")
+        mod = self._load_st_ask()
+        with patch("sys.stdin") as mock_stdin:
+            mock_stdin.isatty.return_value = True
+            with patch("builtins.input") as mock_input:
+                result = mod._maybe_prompt_feedback()
+                mock_input.assert_not_called()
+        assert result is None
+
+    def test_no_prompt_when_not_a_tty(self, monkeypatch):
+        monkeypatch.setenv("CROSS_ASK_TELEMETRY", "on")
+        mod = self._load_st_ask()
+        with patch("sys.stdin") as mock_stdin:
+            mock_stdin.isatty.return_value = False
+            with patch("builtins.input") as mock_input:
+                result = mod._maybe_prompt_feedback()
+                mock_input.assert_not_called()
+        assert result is None
+
+    def test_no_prompt_when_feedback_disabled(self, monkeypatch):
+        """--no-feedback toggles the module flag off → never prompts."""
+        monkeypatch.setenv("CROSS_ASK_TELEMETRY", "on")
+        mod = self._load_st_ask()
+        mod._FEEDBACK_ENABLED = False
+        with patch("sys.stdin") as mock_stdin:
+            mock_stdin.isatty.return_value = True
+            with patch("builtins.input") as mock_input:
+                result = mod._maybe_prompt_feedback()
+                mock_input.assert_not_called()
+        assert result is None
+
+    def test_thumbs_up(self, monkeypatch):
+        monkeypatch.setenv("CROSS_ASK_TELEMETRY", "on")
+        mod = self._load_st_ask()
+        with patch("sys.stdin") as mock_stdin:
+            mock_stdin.isatty.return_value = True
+            with patch("builtins.input", return_value="y"):
+                assert mod._maybe_prompt_feedback() is True
+
+    def test_thumbs_down(self, monkeypatch):
+        monkeypatch.setenv("CROSS_ASK_TELEMETRY", "on")
+        mod = self._load_st_ask()
+        with patch("sys.stdin") as mock_stdin:
+            mock_stdin.isatty.return_value = True
+            with patch("builtins.input", return_value="n"):
+                assert mod._maybe_prompt_feedback() is False
+
+    def test_skip_on_enter(self, monkeypatch):
+        monkeypatch.setenv("CROSS_ASK_TELEMETRY", "on")
+        mod = self._load_st_ask()
+        with patch("sys.stdin") as mock_stdin:
+            mock_stdin.isatty.return_value = True
+            with patch("builtins.input", return_value=""):
+                assert mod._maybe_prompt_feedback() is None
+
+    def test_skip_on_keyboard_interrupt(self, monkeypatch):
+        monkeypatch.setenv("CROSS_ASK_TELEMETRY", "on")
+        mod = self._load_st_ask()
+        with patch("sys.stdin") as mock_stdin:
+            mock_stdin.isatty.return_value = True
+            with patch("builtins.input", side_effect=KeyboardInterrupt):
+                assert mod._maybe_prompt_feedback() is None
+
+    def test_report_sends_helpful_from_prompt(self, monkeypatch):
+        """_report() collects feedback and forwards it to send_event."""
+        monkeypatch.setenv("CROSS_ASK_TELEMETRY", "on")
+        mod = self._load_st_ask()
+        sent = {}
+        mod._ask_telemetry.send_event = lambda *a, **kw: sent.update(kw)
+        with patch("sys.stdin") as mock_stdin:
+            mock_stdin.isatty.return_value = True
+            with patch("builtins.input", return_value="y"):
+                mod._report("q", tier="pseudo", matched=True)
+        assert sent["helpful"] is True
+
+    def test_report_no_feedback_for_no_match(self, monkeypatch):
+        """No-match results never prompt (nothing to rate) → helpful=None."""
+        monkeypatch.setenv("CROSS_ASK_TELEMETRY", "on")
+        mod = self._load_st_ask()
+        sent = {}
+        mod._ask_telemetry.send_event = lambda *a, **kw: sent.update(kw)
+        with patch("sys.stdin") as mock_stdin:
+            mock_stdin.isatty.return_value = True
+            with patch("builtins.input") as mock_input:
+                mod._report("q", tier="pseudo", matched=False, feedback=False)
+                mock_input.assert_not_called()
+        assert sent["helpful"] is None
+
+

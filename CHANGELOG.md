@@ -23,6 +23,14 @@ Cross uses [Semantic Versioning](https://semver.org/).
   last 5 errors (path/secret-scrubbed at write time) for `--explain-last-error`.
 - Runtime deps `scikit-learn>=1.0.0` + `rapidfuzz>=3.0.0` (Pseudo-AI matcher;
   auto-installed on first use).
+- **`st-ask` opt-in telemetry & feedback** (ASK-16/17/18). Anonymous, **off by
+  default**; enable with `st-admin --ask-telemetry on` or the one-time first-run
+  consent prompt. Collects only the scrubbed question, tier, match/no-match, and
+  (new) an optional post-answer **thumb-up/down** (`Was this helpful?`). The
+  prompt is skippable, appears only in an interactive terminal, and can be
+  disabled per-invocation with `st-ask --no-feedback`. No usernames, API keys,
+  or paths are ever sent. The signal drives the FAQ backfill queue surfaced in
+  the crossai.dev admin portal (`/crossai-admin/ask`).
 
 ---
 

@@ -18,6 +18,22 @@ Answers are shown as **rendered markdown** — styled headings, lists, code, and
 
 For clickable links, see [Terminal Setup](Terminal-Setup) (macOS: `brew install --cask iterm2`). Set `CROSS_MARKDOWN=off` in `~/.crossenv` to disable rendering everywhere.
 
+## Feedback & telemetry (opt-in)
+
+If you have opted in to anonymous usage telemetry (`st-admin --ask-telemetry on`), `st-ask` shows a one-keystroke **thumb-up/down** prompt after each answer:
+
+```
+  Was this helpful? [y/n, Enter to skip]:
+```
+
+It's always skippable (press Enter) and never blocks. The result feeds the anonymous, scrubbed telemetry event that helps prioritise FAQ improvements — no personal data, API keys, or paths are ever sent. Telemetry stays **off** until you opt in.
+
+| Flag | Effect |
+|------|--------|
+| `--no-feedback` | Skip the post-answer thumb-up/down prompt |
+
+The prompt only appears when telemetry is enabled **and** you're in an interactive terminal; it's automatically silent when piped or scripted.
+
 ## Features
 - No API key required
 - Local, privacy-preserving
