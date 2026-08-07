@@ -1,4 +1,4 @@
-# corpus_version: 0.12.0
+# corpus_version: 2026.8.0
 
 # Cross-st Help Content
 
@@ -628,6 +628,7 @@ New user? Start here: **[Onboarding](Onboarding)** — set up your API keys and 
 | [st](st) | Interactive menu — launch any command from a numbered list |
 | [st-admin](st-admin) | Settings manager: DEFAULT_AGENT, model overrides, TTS voice, editor |
 | [st-analyze](st-analyze) | AI-powered analysis of cross-product fact-check data |
+| [st-ask](st-ask) | Local FAQ help assistant — no API key required |
 | [st-bang](st-bang) | Parallel report generation — run all AIs at once |
 | [st-cat](st-cat) | Print story fields to stdout (pipe-friendly) |
 | [st-cross](st-cross) | Cross-product: generate N stories × fact-check with N AIs |
@@ -5369,11 +5370,36 @@ Download the ONNX file: `st-voice --curl | grep "your-voice" | bash`
 All notable changes to Cross are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).  
-Cross uses [Semantic Versioning](https://semver.org/).
+Cross uses Calendar Versioning (`YYYY.M.R`).
 
 ---
 
 ## [Unreleased]
+
+---
+
+## [2026.8.0] — 2026-08-07  *(CalVer migration cut)*
+
+First Calendar Versioning release. This is a one-time version-scheme migration
+from SemVer-style `0.x` to `YYYY.M.R`.
+
+- `YYYY` = 4-digit year
+- `M` = month `1-12` (no leading zero)
+- `R` = release index within the month, starting at `0`
+
+Why the jump is large: package installers compare versions numerically
+left-to-right, so `2026.8.0 > 0.12.0` and upgrades remain monotonic.
+
+### Changed
+- `pyproject.toml` version changed from `0.12.0` to `2026.8.0`.
+- Minimum `cross-ai-core` changed to `cross-ai-core[all]>=2026.8.0`.
+- `requirements.txt` and `requirements-no-tts.txt` pins changed to
+  `cross-ai-core[all]==2026.8.0`.
+
+### Notes
+- This is a versioning migration release; runtime behaviour is unchanged from
+  the 0.12.0 code line.
+- Coordinated with `cross-ai-core 2026.8.0`.
 
 ---
 

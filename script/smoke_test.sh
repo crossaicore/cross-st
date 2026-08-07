@@ -5,7 +5,7 @@
 # runs a series of quick checks, then uninstalls it.
 #
 # Usage:
-#   bash script/smoke_test.sh 0.2.0
+#   bash script/smoke_test.sh 2026.8.0
 #   bash script/smoke_test.sh          # uses latest from PyPI
 #
 # Requires:  pipx (brew install pipx / apt install pipx)

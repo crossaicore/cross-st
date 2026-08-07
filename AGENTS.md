@@ -54,6 +54,22 @@ docs/wiki/         ← GitHub Wiki source files (version-controlled); auto-built
 
 **Never hardcode AI provider names or model strings in code.** Always call `get_default_ai()` from `ai_handler` when a default provider is needed, and `get_ai_model(make)` / `settings_get_ai_model(make)` when a model string is needed. Use `--ai` CLI flags to let callers override. Hardcoded names like `"xai"` or `"anthropic"` in code are a bug.
 
+## Versioning
+
+`cross-st` uses Calendar Versioning: `YYYY.M.R`.
+
+- `YYYY` = 4-digit year
+- `M` = month `1-12` (no leading zero)
+- `R` = release index within that month, starting at `0`
+
+Examples: `2026.8.0`, `2026.8.1`.
+
+Tags use the same value prefixed with `v`: `v2026.8.0`.
+
+The old SemVer-style `0.x` line is retired; we intentionally skip a `1.0`
+marketing milestone. Keep versions strictly increasing to preserve
+PEP 440/pip upgrade ordering.
+
 ## JSON Container Format (`.json` files)
 Every story lives in a single `.json` container with two top-level arrays:
 ```json
