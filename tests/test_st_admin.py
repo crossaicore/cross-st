@@ -114,6 +114,13 @@ class TestEnvHelpers:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestGetDefaultAi:
+    def test_empty_agent_list_has_actionable_error(self, monkeypatch):
+        monkeypatch.setattr(st_admin, "get_ai_list", lambda: [])
+        monkeypatch.delenv("DEFAULT_AGENT", raising=False)
+        monkeypatch.delenv("DEFAULT_AI", raising=False)
+        with pytest.raises(RuntimeError, match="No agents are available"):
+            settings_get_default_ai()
+
     def test_no_env_var_returns_first_in_list(self, monkeypatch):
         monkeypatch.delenv("DEFAULT_AGENT", raising=False); monkeypatch.delenv("DEFAULT_AI", raising=False)
         assert settings_get_default_ai() == AI_LIST[0]

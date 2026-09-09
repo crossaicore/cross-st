@@ -193,6 +193,11 @@ def settings_get_default_ai() -> str:
     configured = _env_get("DEFAULT_AGENT", "").strip() or _env_get("DEFAULT_AI", "").strip()
     if configured and configured in ai_list:
         return configured
+    if not ai_list:
+        raise RuntimeError(
+            "No agents are available. Configure an AI provider API key or "
+            "add an agent with: st-admin --add-agent NAME=MAKE[:MODEL]"
+        )
     return ai_list[0]
 
 
@@ -2399,7 +2404,10 @@ def interactive_menu() -> None:
 
                     # ── Top-level ─────────────────────────────────────────────
                     case ("st-admin", "s"):
-                        settings_show_all()
+                        try:
+                            settings_show_all()
+                        except RuntimeError as exc:
+                            print(f"\n  ✗  {exc}")
 
                     case ("st-admin", "u"):
                         upgrade_cross()
@@ -2411,7 +2419,11 @@ def interactive_menu() -> None:
                         from ai_handler import get_ai_list as _gal
                         from _agent_admin import list_agents
                         ai_list = _gal()
-                        current = settings_get_default_ai()
+                        try:
+                            current = settings_get_default_ai()
+                        except RuntimeError as exc:
+                            print(f"\n  ✗  {exc}")
+                            continue
                         rows = {r["agent"]: r for r in list_agents()}
                         cur_row = rows.get(current)
                         cur_label = (
@@ -2740,11 +2752,19 @@ def main() -> None:
         return
 
     if args.show:
-        settings_show_all()
+        try:
+            settings_show_all()
+        except RuntimeError as exc:
+            print(f"✗  {exc}", file=sys.stderr)
+            sys.exit(1)
         return
 
     if args.get_default_ai:
-        print(settings_get_default_ai())
+        try:
+            print(settings_get_default_ai())
+        except RuntimeError as exc:
+            print(f"✗  {exc}", file=sys.stderr)
+            sys.exit(1)
         return
 
     if args.set_default_ai:
