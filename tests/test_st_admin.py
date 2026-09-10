@@ -414,6 +414,42 @@ class TestCLI:
 
     # ── --show ────────────────────────────────────────────────────────────────
 
+    def test_check_keys_probes_configured_provider_without_cache(self, tmp_settings, monkeypatch, capsys):
+        calls = []
+        monkeypatch.setattr(st_admin, "has_api_key", lambda make: make == "xai")
+        monkeypatch.setattr(
+            st_admin,
+            "process_prompt",
+            lambda make, prompt, **kwargs: calls.append((make, prompt, kwargs)),
+        )
+        monkeypatch.setattr(sys, "argv", ["st-admin", "--check-keys"])
+
+        st_admin.main()
+
+        assert calls == [("xai", "Reply with exactly: OK", {
+            "verbose": False,
+            "use_cache": False,
+        })]
+        assert "working" in capsys.readouterr().out
+
+    def test_check_keys_continues_after_provider_failure(self, tmp_settings, monkeypatch, capsys):
+        monkeypatch.setattr(st_admin, "has_api_key", lambda make: make in {"xai", "openai"})
+
+        def fail_xai(make, prompt, **kwargs):
+            if make == "xai":
+                raise RuntimeError("rejected")
+
+        monkeypatch.setattr(st_admin, "process_prompt", fail_xai)
+        monkeypatch.setattr(sys, "argv", ["st-admin", "--check-keys"])
+
+        with pytest.raises(SystemExit) as exc_info:
+            st_admin.main()
+
+        assert exc_info.value.code == 1
+        out = capsys.readouterr().out
+        assert "xai" in out and "openai" in out
+        assert "failed" in out and "working" in out
+
     def test_show_returns_cleanly(self, tmp_settings, monkeypatch, capsys):
         monkeypatch.setattr(sys, "argv", ["st-admin", "--show"])
         st_admin.main()          # should return without SystemExit

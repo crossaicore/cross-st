@@ -178,7 +178,9 @@ Quickest check:
 st-admin --check-keys
 ```
 
-…which validates each configured key against its provider.
+…which sends one small live request to each configured provider. It bypasses
+the response cache, so it verifies the current key but may use a small
+amount of provider quota. Missing keys are skipped.
 
 **See also:**
 - https://github.com/crossaicore/cross-st/wiki/st-admin

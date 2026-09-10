@@ -20,6 +20,7 @@ Non-interactive (scripting / shell):
   st-admin --add-agent NAME=MAKE[:MODEL]  # add / update an agent in ~/.cross_ai_models.json
   st-admin --remove-agent NAME    # remove a user-defined agent
   st-admin --list-agents         # print the agent registry table
+    st-admin --check-keys          # live-test configured AI provider keys
   st-admin --set-tts-voice VOICE  # set TTS voice (writes TTS_VOICE to .env)
   st-admin --set-template NAME    # set default prompt template
   st-admin --set-editor NAME      # set editor (writes EDITOR to .env)
@@ -61,7 +62,13 @@ except ImportError:
 
 from dotenv import load_dotenv, set_key
 
-from ai_handler import get_ai_list, AI_HANDLER_REGISTRY
+from ai_handler import (
+    get_ai_list,
+    AI_HANDLER_REGISTRY,
+    _API_KEY_ENV_VARS,
+    process_prompt,
+)
+from cross_ai_core.keys import has_api_key
 from base_handler import _get_cache_dir
 from mmd_startup import load_cross_env, _PROJECT_ROOT, _in_project_venv
 from mmd_util import (seed_user_templates, _USER_TEMPLATES_DIR, _BUNDLED_TEMPLATES_DIR,
@@ -278,6 +285,48 @@ def spell_check_install_command(system: str, distro_id: str = "") -> str:
     if system == "Linux":
         return "sudo apt install aspell aspell-en"
     return "Install aspell and an English dictionary for your operating system."
+
+
+def check_keys() -> bool:
+    """Live-test every configured cloud provider and return overall success.
+
+    Each probe bypasses the response cache so a successful result reflects the
+    current key. This makes one small billable API request per configured
+    provider; missing keys are reported without making a request.
+    """
+    print("\n  Checking configured AI provider keys…")
+    print("  Each configured provider receives one small live request; normal API charges may apply.\n")
+
+    checked = 0
+    failures = 0
+    for make, env_var in _API_KEY_ENV_VARS.items():
+        if not has_api_key(make):
+            print(f"  -  {make:<12} skipped ({env_var} not set)")
+            continue
+
+        checked += 1
+        print(f"  …  {make:<12} testing…", flush=True)
+        try:
+            process_prompt(
+                make,
+                "Reply with exactly: OK",
+                verbose=False,
+                use_cache=False,
+            )
+        except (Exception, SystemExit) as exc:
+            failures += 1
+            print(f"  ✗  {make:<12} failed ({type(exc).__name__})")
+        else:
+            print(f"  ✓  {make:<12} working")
+
+    if checked == 0:
+        print("\n  No cloud provider API keys are configured.")
+        return False
+    if failures:
+        print(f"\n  {failures} provider check(s) failed.")
+        return False
+    print(f"\n  All {checked} configured provider(s) responded successfully.")
+    return True
 
 
 def init_user_templates(overwrite: bool = False) -> None:
@@ -2697,6 +2746,10 @@ def main() -> None:
         help="Print the agent registry (one row per loaded agent)",
     )
     parser.add_argument(
+        "--check-keys", action="store_true",
+        help="Live-test configured AI provider keys (may use provider quota)",
+    )
+    parser.add_argument(
         "--set-tts-voice", metavar="VOICE",
         help="Set the TTS voice string (written to TTS_VOICE in .env)",
     )
@@ -2838,6 +2891,11 @@ def main() -> None:
     if args.list_agents:
         from _agent_admin import list_agents, format_agent_table
         print(format_agent_table(list_agents()))
+        return
+
+    if args.check_keys:
+        if not check_keys():
+            sys.exit(1)
         return
 
     if args.set_tts_voice:
