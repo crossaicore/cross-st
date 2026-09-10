@@ -1,4 +1,4 @@
-# corpus_version: 2026.8.0
+# corpus_version: 2026.9.0
 
 # Cross-st Help Content
 
@@ -2603,6 +2603,7 @@ st-admin --version              # print installed version
 st-admin --get-default-ai       # print current default agent
 st-admin --set-default-ai NAME  # switch default agent (e.g. gemini, anthropic-opus)
 st-admin --list-agents         # table of every agent → provider · model
+st-admin --check-keys          # live-test configured AI provider keys
 st-admin --add-agent NAME=PROVIDER:MODEL    # e.g. anthropic-opus=anthropic:claude-opus-4-5
 st-admin --add-agent NAME=PROVIDER          # uses provider's recommended model
 st-admin --remove-agent NAME    # remove a custom agent
@@ -2646,6 +2647,41 @@ st-new my_first_topic        # create a prompt file
 st-gen my_first_topic.json   # generate a story
 st-ls  my_first_topic.json   # list what's in the container
 ```
+
+---
+
+### Checking provider keys
+
+Use `--check-keys` to make one small live request to every configured cloud
+provider.  It bypasses the response cache, so it checks the current keys rather
+than a cached response.  Normal provider API charges may apply.
+
+```bash
+st-admin --check-keys
+```
+
+Example with all five cloud providers configured:
+
+```
+  Checking configured AI provider keys…
+  Each configured provider receives one small live request; normal API charges may apply.
+
+  …  xai          testing…
+  ✓  xai          working
+  …  anthropic    testing…
+  ✓  anthropic    working
+  …  openai       testing…
+  ✓  openai       working
+  …  perplexity   testing…
+  ✓  perplexity   working
+  …  gemini       testing…
+  ✓  gemini       working
+
+  All 5 configured provider(s) responded successfully.
+```
+
+Providers without a configured key are skipped.  The command exits with status
+`1` if no cloud keys are configured or if any configured provider fails.
 
 ---
 
@@ -5377,6 +5413,22 @@ Cross uses Calendar Versioning (`YYYY.M.R`).
 ---
 
 ## [Unreleased]
+
+---
+
+## [2026.9.0] — 2026-09-10
+
+### Added
+- `st-admin --check-keys` live-tests every configured cloud AI provider with an
+  uncached, minimal request and reports failures without exposing API keys.
+- Platform-aware Aspell installation guidance for Arch, Debian/Ubuntu,
+  Fedora/RHEL, and macOS in `st-admin --setup`.
+
+### Changed
+- `st-new` and the interactive `st` menu now skip spell checking gracefully
+  when Aspell is not installed.
+- Updated `st-ask` support content and the `st-admin` wiki with current
+  `--check-keys` behavior and examples.
 
 ---
 
