@@ -39,6 +39,8 @@ pandas==2.2.3
 pillow>=12.1.1
 scipy==1.15.2
 seaborn==0.13.2
+scikit-learn==1.6.1
+rapidfuzz==3.13.0
 
 # ── Text processing ───────────────────────────────────────────────────────────
 markdown==3.7
