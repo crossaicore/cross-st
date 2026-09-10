@@ -267,6 +267,19 @@ def settings_get_editor() -> str:
     return _env_get("EDITOR", os.environ.get("EDITOR", "vi"))
 
 
+def spell_check_install_command(system: str, distro_id: str = "") -> str:
+    """Return the platform command for installing Aspell and English words."""
+    if system == "Darwin":
+        return "brew install aspell"
+    if system == "Linux" and distro_id in {"arch", "manjaro", "endeavouros"}:
+        return "sudo pacman -S aspell aspell-en"
+    if system == "Linux" and distro_id in {"fedora", "rhel", "rocky", "almalinux", "ol"}:
+        return "sudo dnf install aspell aspell-en"
+    if system == "Linux":
+        return "sudo apt install aspell aspell-en"
+    return "Install aspell and an English dictionary for your operating system."
+
+
 def init_user_templates(overwrite: bool = False) -> None:
     """
     Copy bundled .prompt files into ~/.cross_templates/.
@@ -1351,11 +1364,14 @@ def setup_wizard() -> None:
                 _d = {k: v.strip('"') for k, _, v in
                       (line.partition("=") for line in _f if "=" in line)}
             os_label = _d.get("PRETTY_NAME", f"Linux ({machine})")
+            distro_id = _d.get("ID", "").lower()
         except Exception:
             os_label = f"Linux ({machine})"
+            distro_id = ""
         is_mac, is_linux = False, True
     else:
         os_label = f"{system} ({machine})"
+        distro_id = ""
         is_mac, is_linux = False, False
 
     # ── Python ────────────────────────────────────────────────────────────────
@@ -1485,7 +1501,7 @@ def setup_wizard() -> None:
         optional_hints.append(("ffmpeg (TTS audio encoding)", cmd))
 
     if not aspell_ok:
-        cmd = "brew install aspell" if is_mac else "sudo apt install aspell"
+        cmd = spell_check_install_command(system, distro_id)
         optional_hints.append(("aspell (spell check in st-new)", cmd))
 
     if not grip_ok:

@@ -94,6 +94,15 @@ def get_template_list():
         return ['default']
 
 
+def run_spell_check(file_prompt: str, quiet: bool = False) -> None:
+    """Run aspell when available; spell checking is an optional feature."""
+    aspell = shutil.which("aspell")
+    if aspell:
+        subprocess.run([aspell, "check", file_prompt])
+    elif not quiet:
+        print("Spell check skipped: 'aspell' is not installed. Use --no-spell to disable this check.")
+
+
 def main():
     require_config()
     load_cross_env()
@@ -159,8 +168,7 @@ def main():
         subprocess.run(cmd.split())
 
         if not args.no_spell:
-            cmd = f"aspell check {file_prompt}"
-            subprocess.run(cmd.split())
+            run_spell_check(file_prompt, quiet=args.quiet)
 
         if args.bang:
             if args.gen and not args.quiet:

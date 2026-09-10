@@ -16,6 +16,7 @@ Adding a new command:
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 
@@ -293,7 +294,11 @@ def execute_menu(menu_name, choice):
                 case "e":
                     cmd = f"vi {file_prefix + '.prompt'}"
                 case "s":
-                    cmd = f"aspell check {file_prefix + '.prompt'}"
+                    if shutil.which("aspell"):
+                        cmd = f"aspell check {file_prefix + '.prompt'}"
+                    else:
+                        print("\nSpell check unavailable: 'aspell' is not installed.")
+                        cmd = ""
                 case "b":
                     cmd = f"st-bang {file_json}"
                 case "B":

@@ -43,9 +43,17 @@ settings_get_tts_voice        = st_admin.settings_get_tts_voice
 settings_get_default_template = st_admin.settings_get_default_template
 settings_get_editor           = st_admin.settings_get_editor
 settings_show_all             = st_admin.settings_show_all
+spell_check_install_command   = st_admin.spell_check_install_command
 
 from ai_handler import get_ai_list
 AI_LIST = get_ai_list()
+
+
+def test_spell_check_install_command_by_platform():
+    assert spell_check_install_command("Linux", "arch") == "sudo pacman -S aspell aspell-en"
+    assert spell_check_install_command("Linux", "ubuntu") == "sudo apt install aspell aspell-en"
+    assert spell_check_install_command("Linux", "fedora") == "sudo dnf install aspell aspell-en"
+    assert spell_check_install_command("Darwin") == "brew install aspell"
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
