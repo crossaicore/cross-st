@@ -11,6 +11,22 @@ Cross uses Calendar Versioning (`YYYY.M.R`).
 
 ---
 
+## [2026.9.0] — 2026-09-10
+
+### Added
+- `st-admin --check-keys` live-tests every configured cloud AI provider with an
+  uncached, minimal request and reports failures without exposing API keys.
+- Platform-aware Aspell installation guidance for Arch, Debian/Ubuntu,
+  Fedora/RHEL, and macOS in `st-admin --setup`.
+
+### Changed
+- `st-new` and the interactive `st` menu now skip spell checking gracefully
+  when Aspell is not installed.
+- Updated `st-ask` support content and the `st-admin` wiki with current
+  `--check-keys` behavior and examples.
+
+---
+
 ## [2026.8.0] — 2026-08-07  *(CalVer migration cut)*
 
 First Calendar Versioning release. This is a one-time version-scheme migration
