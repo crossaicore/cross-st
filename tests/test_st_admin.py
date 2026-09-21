@@ -58,6 +58,38 @@ def test_spell_check_install_command_by_platform():
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
+@pytest.mark.parametrize("pipx_managed,editable", [(True, False), (True, True), (False, False), (False, True)])
+def test_upgrade_uses_venv_metadata_with_symlinked_python(tmp_path, monkeypatch, pipx_managed, editable):
+    import importlib.metadata
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    venv = tmp_path / "custom-pipx-home" / "venvs" / "cross-st"
+    (venv / "bin").mkdir(parents=True)
+    executable = venv / "bin" / "python"
+    executable.symlink_to(sys.executable)
+    if pipx_managed:
+        (venv / "pipx_metadata.json").write_text("{}")
+    monkeypatch.setattr(sys, "prefix", str(venv))
+    monkeypatch.setattr(sys, "executable", str(executable))
+    monkeypatch.delenv("PIPX_HOME", raising=False)
+    monkeypatch.setattr("platform.system", lambda: "Linux")
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/local/bin/pipx" if name == "pipx" else None)
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "2026.9.0")
+    dist = SimpleNamespace(read_text=lambda name: '{"dir_info": {"editable": true}}' if editable else None)
+    monkeypatch.setattr(importlib.metadata.Distribution, "from_name", lambda name: dist)
+    run = Mock(return_value=SimpleNamespace(returncode=0, stdout="2026.9.0\n"))
+    monkeypatch.setattr(st_admin.subprocess, "run", run)
+
+    st_admin.upgrade_cross()
+
+    if pipx_managed:
+        assert run.call_args_list[0].args[0] == ["/usr/local/bin/pipx", "upgrade", "cross-st"]
+    elif editable:
+        run.assert_not_called()
+    else:
+        assert run.call_args_list[0].args[0] == [str(executable), "-m", "pip", "install", "--upgrade", "cross-st"]
+
 @pytest.fixture
 def tmp_settings(tmp_path, monkeypatch):
     """
@@ -1385,5 +1417,4 @@ class TestDiscourseSelectCategory:
         monkeypatch.setattr(_msk, "get_single_key", lambda: "ESC")
         st_admin._discourse_select_category()
         assert "esc" in capsys.readouterr().out.lower()
-
 

@@ -1909,24 +1909,17 @@ def upgrade_cross() -> None:
 
     # ── Detect install type ───────────────────────────────────────────────────
     # Priority order:
-    #   1. Is sys.executable inside a pipx venv?  → pipx install
+    #   1. Does the active venv have pipx metadata? → pipx install
     #   2. Does direct_url.json say editable=true? → dev install
     #   3. Otherwise                               → plain pip install
     import pathlib
 
     pipx_bin  = shutil.which("pipx")
-    using_pipx = False
+    # Python in a venv is commonly a symlink to the system interpreter.
+    # Resolving sys.executable loses the venv location; sys.prefix preserves it.
+    # The metadata also supports legacy, platform-default and custom PIPX_HOME.
+    using_pipx = (pathlib.Path(sys.prefix) / "pipx_metadata.json").is_file()
     is_editable = False
-
-    exe_path  = pathlib.Path(sys.executable).resolve()
-    pipx_home = pathlib.Path(
-        os.environ.get("PIPX_HOME", os.path.expanduser("~/.local/pipx"))
-    )
-    try:
-        exe_path.relative_to(pipx_home)
-        using_pipx = True          # running executable is inside the pipx venv
-    except ValueError:
-        pass
 
     if not using_pipx:
         # Only check for editable marker when NOT running from pipx
@@ -2939,4 +2932,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
