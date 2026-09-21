@@ -50,7 +50,7 @@ Supported: `anthropic`, `xai`, `gemini`, `openai`, `ollama`.
 
 | Flag | Description |
 |------|-------------|
-| `--agent AI` | AI provider for content generation (default: `xai`) |
+| `--agent AI` | AI provider for content generation (default: the configured default agent) |
 | `--cache` | Enable API response cache (default: on) |
 | `--no-cache` | Disable API cache for this run |
 | `-v`, `--verbose` | Verbose output |

@@ -1,7 +1,7 @@
 # cross-st support FAQ
 #
 # This file is the single source of truth for `st-ask` Pseudo-AI mode (no API
-# key configured). It is read at runtime by `cross_st/_ask_match.py` and
+# key configured). It is read at runtime by `cross_st/st-ask.py` and
 # composed into `support_content.md` for the Full LLM tier by
 # `script/build_ask_corpus.py`.
 #
@@ -9,8 +9,7 @@
 #   id:                str — slug (kebab-case), unique, stable
 #   question:          str — canonical phrasing used in the menu
 #   aliases:           list[str] — alternate phrasings the matcher should hit
-#   error_signatures:  list[str] — substrings tested first when input looks
-#                                  like a traceback (--explain-last-error)
+#   error_signatures:  list[str] — reserved metadata; not yet used by the matcher
 #   answer:            str — verbatim user-voice answer; markdown allowed
 #   see_also:          list[str] — wiki / docs links surfaced after answer
 #
@@ -395,18 +394,47 @@
     pipx upgrade cross-st
     ```
 
-    Or, equivalently:
+    For releases containing the pipx-detection fix, you can also use:
 
     ```bash
     st-admin --upgrade
     ```
 
-    …which detects whether you installed via pipx, a regular venv, or an
-    editable dev install, and prints the right command for your case.
+    This upgrades pipx or regular pip installs; editable installs receive
+    instructions for updating the checkout. In 2026.9.0, a detection bug can
+    use pip inside a pipx environment and leave new commands unavailable.
+    Use `pipx upgrade cross-st` directly for that release.
 
-    Cross-st checks PyPI for newer versions on every `st-admin` invocation
-    and prints a one-line nudge if you're behind.
+    Cross-st checks for updates in interactive terminals, at most once per
+    24 hours, and prints a notice when a newer release is available.
   see_also:
     - https://github.com/crossaicore/cross-st/wiki/st-admin
     - https://pypi.org/project/cross-st/
 
+
+- id: get-help
+  question: "Where can I get help?"
+  aliases:
+    - "cross-st support"
+    - "report a bug"
+  answer: |
+    Use `st-man <command>` for command help, or `st-man <command> --web`
+    to open its wiki page. Ask the community at https://crossai.dev or
+    report a bug at https://github.com/crossaicore/cross-st/issues.
+  see_also:
+    - https://github.com/crossaicore/cross-st/wiki
+    - https://github.com/crossaicore/cross-st/issues
+
+- id: uninstall
+  question: "How do I uninstall cross-st?"
+  aliases:
+    - "remove cross-st"
+    - "uninstall cross-st"
+  answer: |
+    For a pipx installation, run:
+
+    ```bash
+    pipx uninstall cross-st
+    ```
+  see_also:
+    - https://github.com/crossaicore/cross-st/wiki/Install

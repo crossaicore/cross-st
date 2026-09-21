@@ -21,4 +21,10 @@ st-speak --voice en_US-ryan-high subject.json  # override voice for this render
 
 ## For developers
 
-Requires `pip install 'cross-ai[tts]'`. Uses `mmd_voice.py` which connects to a local Piper TTS server (`TTS_HOST`/`TTS_PORT` in `.env`). Exits cleanly with an error message if TTS dependencies are missing.
+Requires `pipx install 'cross-st[tts]'`. Uses `mmd_voice.py` which connects to a local Piper TTS server (`TTS_HOST`/`TTS_PORT` in `.env`). Exits cleanly with an error message if TTS dependencies are missing.
+
+## Additional current options
+
+- `-s`, `--story`: Story to convert (integer), default 1
+- `-v`, `--verbose`: Enable verbose output, default is verbose
+- `-q`, `--quiet`: Enable minimal output

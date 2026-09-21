@@ -25,3 +25,9 @@ st-print --printer "HP_LaserJet" s.json   # send to a specific printer
 ## For developers
 
 Pipeline: Markdown → HTML (via `mistune`) → PDF (via `WeasyPrint`). `--preview` opens the PDF in the system viewer before printing.
+
+## Additional current options
+
+- `-s`, `--story`: Story number to print (1-based, default: 1)
+- `-v`, `--verbose`: Verbose output
+- `-q`, `--quiet`: Suppress informational output

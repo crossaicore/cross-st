@@ -25,7 +25,7 @@ st-fact --paragraph subject.json       # write paragraph segments to _paragraph_
 |--------|-------------|
 | `-s N`, `--story N` | Fact-check a single story by number (default: 1) |
 | `--all` | Fact-check every story in the container |
-| `--agent AI` | AI provider to use, or `all` to run all providers in parallel (default: `xai`) |
+| `--agent AI` | AI provider to use, or `all` to run all providers in parallel (default: the configured default agent) |
 | `--cache` | Enable the API response cache (default: enabled) |
 | `--no-cache` | Bypass the API response cache |
 | `--file` | Also write results to a `.txt` file alongside the container |

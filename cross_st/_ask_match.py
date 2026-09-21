@@ -35,7 +35,15 @@ def find_matches(query, faq_entries, top_k=3):
     Each entry: {"id": ..., "question": ..., "answer": ...}
     """
     TfidfVectorizer, rapidfuzz = _lazy_imports()
-    questions = [entry["question"] for entry in faq_entries]
+    if not faq_entries or not query.strip() or top_k <= 0:
+        return []
+    # Score alternate phrasings independently, then keep each entry's best
+    # score so an entry with many aliases cannot crowd out other results.
+    questions, owners = [], []
+    for index, entry in enumerate(faq_entries):
+        for phrase in [entry["question"], *entry.get("aliases", [])]:
+            questions.append(phrase)
+            owners.append(index)
     # Drop English stop words ("how", "do", "i", "a", …) so shared filler
     # in every FAQ question ("How do I … cross-st?") doesn't inflate the
     # score of an unrelated query. Fall back to no stop-word list if the
@@ -55,7 +63,11 @@ def find_matches(query, faq_entries, top_k=3):
         ) / 100
         for q in questions
     ]
-    combined = [(0.7*s + 0.3*f, i) for i, (s, f) in enumerate(zip(scores, fuzz_scores))]
+    best = {}
+    for index, (score, fuzzy) in enumerate(zip(scores, fuzz_scores)):
+        owner = owners[index]
+        best[owner] = max(best.get(owner, 0), 0.7 * score + 0.3 * fuzzy)
+    combined = [(score, index) for index, score in best.items()]
     combined.sort(reverse=True)
     results = []
     for score, idx in combined[:top_k]:

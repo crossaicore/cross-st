@@ -64,3 +64,7 @@ Run `st-fact` or `st-cross` to populate the Score column.
 - st-cross  — cross-product N×N fact-check (every AI checks every story)
 - st-read   — display the full text of a story
 - st-cat    — dump the raw JSON container
+
+## Additional current options
+
+- `--score-weights`: Override composite-score weights, e.g. "cov=0.25,comp=0.25,acc=0.40,cal=0.10". Keys: cov, comp, acc, cal (or full names).

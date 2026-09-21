@@ -41,6 +41,7 @@ scipy==1.15.2
 seaborn==0.13.2
 scikit-learn==1.6.1
 rapidfuzz==3.13.0
+PyYAML>=6.0  # curated st-ask FAQ (also required by pyproject.toml)
 
 # ── Text processing ───────────────────────────────────────────────────────────
 markdown==3.7

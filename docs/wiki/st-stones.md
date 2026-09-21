@@ -65,10 +65,14 @@ st-stones --ai-caption cross_stones/cross-stones-10.json       # AI caption of l
 | `--ai-caption` | Generate a 100–160-word two-paragraph caption → stdout |
 | `--ai-summary` | Generate a 120–200-word summary → stdout |
 | `--ai-story` | Generate an 800–1200-word narrative → stdout |
-| `--agent NAME` | AI provider for content generation (default: `xai`) |
+| `--agent NAME` | AI provider for content generation (default: the configured default agent) |
 
 ---
 
 ## For developers
 
 Score formula: `w1 × (fact_score / max_fact_score) + w2 × (speed_score / max_speed_score)` with defaults `w1=0.7`, `w2=0.3`. The locked benchmark set is `cross_stones/cross-stones-10.json`. Pass `--no-speed` for accuracy-only scoring. `--set-baseline` must be run once after the first complete benchmark; subsequent faster runs will have `speed_ratio > 1.0` and `cross_stone_score` may exceed 1.0, indicating genuine improvement.
+
+## Additional current options
+
+- `--score-weights`: Override composite-score weights, e.g. 'cov=0.25,comp=0.25,acc=0.40,cal=0.10'. Keys: cov, comp, acc, cal (or full names).

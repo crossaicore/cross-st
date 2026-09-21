@@ -509,3 +509,8 @@ This closes the gap between provisioning and posting without requiring you to re
 
 Reads and writes `~/.crossenv` (global) and `.env` (repo-local). Model overrides are stored in `.ai_models`, one `provider=model` per line. `--init-templates` seeds `~/.cross_templates/` from the bundled `template/` directory.
 
+
+## Additional current options
+
+- `--ask-telemetry`: Enable or disable anonymous st-ask usage telemetry (default off)
+- `--set-ai-model`: Set a per-provider model override (e.g. xai=grok-3)

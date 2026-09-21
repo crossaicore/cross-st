@@ -157,7 +157,7 @@ METADATA: dict[str, dict] = {
         "after": ["st-gen", "st-fetch"],
         "before": ["st-fact", "st-post"],
         "related": ["st-gen", "st-fact", "st-speak"],
-        "dev": "Called automatically by `st-gen --prep`, `st-cross`, `st-fetch`, and `st-fix`. Writes to `story[]` in the container. TTS rendering (`--mp3`) uses `mmd_voice.py` and requires the TTS extras (`pip install 'cross-ai[tts]'`).",
+        "dev": "Called automatically by `st-gen` unless `--no-prep` is supplied, `st-cross`, `st-fetch`, and `st-fix`. Writes to `story[]` in the container. TTS rendering (`--mp3`) uses `mmd_voice.py` and requires the TTS extras (`pipx install 'cross-st[tts]'`).",
     },
     "st-print": {
         "desc": "Exports a story as a PDF, or sends it directly to a printer. Use `--save-pdf` to save the file without printing.",
@@ -179,7 +179,7 @@ METADATA: dict[str, dict] = {
         "after": ["st-prep"],
         "before": ["st-post"],
         "related": ["st-voice", "st-post", "tts-audio"],
-        "dev": "Requires `pip install 'cross-ai[tts]'`. Uses `mmd_voice.py` which connects to a local Piper TTS server (`TTS_HOST`/`TTS_PORT` in `.env`). Exits cleanly with an error message if TTS dependencies are missing.",
+        "dev": "Requires `pipx install 'cross-st[tts]'`. Uses `mmd_voice.py` which connects to a local Piper TTS server (`TTS_HOST`/`TTS_PORT` in `.env`). Exits cleanly with an error message if TTS dependencies are missing.",
     },
     "st-speed": {
         # NOTE: docs/wiki/st-speed.md is hand-authored — build_wiki.py will not overwrite it.

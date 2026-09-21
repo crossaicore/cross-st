@@ -25,3 +25,8 @@ st-new --bang subject                   # edit then run st-bang (all AIs)
 ## For developers
 
 Template resolution order: `./template/` (CWD) → `~/.cross_templates/` → `<script-dir>/template/`. After editing, optionally launches `st-bang` automatically. `st-admin --init-templates` seeds `~/.cross_templates/` for pip/pipx installs.
+
+## Additional current options
+
+- `-v`, `--verbose`: Enable verbose output, default is verbose
+- `-q`, `--quiet`: Enable minimal output

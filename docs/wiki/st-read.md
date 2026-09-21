@@ -28,3 +28,8 @@ Metrics: Dale-Chall  FK-Ease  Auto-Read  Coleman-Liau  FK-Grade
 
 Grade-level metrics share a scale: 6–8 middle school, 9–12 high school,
 12+ college.  FK-Ease: 70+ easy, 60–69 standard, below 50 difficult.
+
+## Additional current options
+
+- `-v`, `--verbose`: Enable verbose output, default is verbose
+- `-q`, `--quiet`: Enable minimal output

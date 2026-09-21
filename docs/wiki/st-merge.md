@@ -29,7 +29,7 @@ st-merge --no-cache subject.json              # bypass API cache
 | Option | Description |
 |--------|-------------|
 | `file.json` | Path to the JSON container |
-| `--agent {xai,…}` | Synthesizer AI for simple mode. In quality mode the base story's author AI is always used. (default: `xai`) |
+| `--agent {xai,…}` | Synthesizer AI for simple mode. In quality mode the base story's author AI is always used. (default: the configured default agent) |
 | `--cache` | Enable API cache (default: enabled) |
 | `--no-cache` | Disable API cache |
 | `-a`, `--all` | Merge all stories |

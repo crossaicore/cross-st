@@ -86,20 +86,24 @@ _SYSTEM_RULES = (
     "  4. Never ask the user to run cloud services or share secrets.\n"
     "  5. When you mention an st-* command, format it as a markdown link to its "
     "wiki page, e.g. [st-print](https://github.com/crossaicore/cross-st/wiki/st-print).\n"
-    "  6. Do NOT add your own 'See also' section — st-ask appends one "
+    "  6. Prefer current command arguments over historical changelog examples.\n"
+    "  7. Do NOT add your own 'See also' section — st-ask appends one "
     "automatically. End with the answer itself.\n\n"
     "----- REFERENCE MATERIAL BEGINS -----\n"
     "{corpus}\n"
     "----- REFERENCE MATERIAL ENDS -----\n"
 )
 
-_FAQ = [
-    {"id": "install", "question": "How do I install cross-st?", "answer": "Run: pipx install cross-st"},
-    {"id": "upgrade", "question": "How do I upgrade cross-st?", "answer": "Run: st-admin --upgrade"},
-    {"id": "api_key", "question": "How do I add an API key?", "answer": "Run: st-admin --setup and follow the prompts."},
-    {"id": "help", "question": "Where can I get help?", "answer": "Ask the community at https://crossai.dev or file an issue at https://github.com/crossaicore/cross-st/issues"},
-    {"id": "uninstall", "question": "How do I uninstall cross-st?", "answer": "Run: pipx uninstall cross-st"},
-]
+def _load_faq():
+    """Load the same curated FAQ used to build the AI reference."""
+    from pathlib import Path
+    import yaml
+
+    path = Path(__file__).parent / "data" / "support_faq.md"
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+_FAQ = _load_faq()
 
 FOOTER = "(local lookup — for full answers add an AI key with 'st-admin --setup')"
 
@@ -161,7 +165,7 @@ def _has_api_key():
 def _print_answer(entry, render_pref=None):
     _markdown.print_markdown(f"\n{entry['answer']}", render=render_pref)
     if entry.get('see_also'):
-        _print_link_block("See also:", [("Documentation", entry['see_also'])], render_pref)
+        _print_link_block("See also:", [("Documentation", link) for link in entry["see_also"]], render_pref)
     _markdown.print_muted(f"\n{FOOTER}", render=render_pref)
 
 def _print_no_match(render_pref=None):
@@ -212,9 +216,10 @@ def _llm_answer(agent, user_query, system_prompt, render_pref=None):
         print(f"\n[LLM error: {e}]")
         print("Falling back to local lookup — retry with:")
         print(f'  st-ask --pseudo "{user_query}"')
-        return
+        return False
     _markdown.print_markdown(f"\n{answer}", render=render_pref)
     _print_link_block("See also:", _SEE_ALSO_LINKS, render_pref)
+    return True
 
 def _read_last_error():
     path = os.path.expanduser("~/.cross_api_cache/last_error.json")
@@ -360,9 +365,9 @@ def main():
             return 1
         if args.question:
             user_query = " ".join(args.question)
-            _llm_answer(agent, user_query, system_prompt, render_pref)
+            answered = _llm_answer(agent, user_query, system_prompt, render_pref)
             _report(
-                scrub(user_query), tier="llm", matched=True, agent=agent,
+                scrub(user_query), tier="llm", matched=answered, agent=agent,
                 render_pref=render_pref,
             )
             return 0
@@ -383,9 +388,9 @@ def main():
                 render_pref = True
                 print("  Rendering on.")
                 continue
-            _llm_answer(agent, q, system_prompt, render_pref)
+            answered = _llm_answer(agent, q, system_prompt, render_pref)
             _report(
-                scrub(q), tier="llm", matched=True, agent=agent,
+                scrub(q), tier="llm", matched=answered, agent=agent,
                 render_pref=render_pref,
             )
         return 0

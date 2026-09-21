@@ -50,7 +50,7 @@ Reads fact-check data from a container and produces two outputs: a **stacked bar
 | `--ai-caption` | Generate a 100–160-word detailed caption → stdout |
 | `--ai-summary` | Generate a 120–200-word summary → stdout |
 | `--ai-story` | Generate an 800–1200-word narrative → stdout |
-| `--agent AI` | AI provider for content generation (default: `xai`) |
+| `--agent AI` | AI provider for content generation (default: the configured default agent) |
 
 > The written analysis is shown as **rendered markdown** (styled, clickable links) in a capable terminal; piped/redirected output stays raw. Use `--no-render` for raw markdown, or set `CROSS_MARKDOWN=off` in `~/.crossenv` to disable rendering everywhere. See [Terminal Setup](Terminal-Setup).
 
