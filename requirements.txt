@@ -40,7 +40,7 @@
 #   setuptools 78.1.0 → 78.1.1 CVE-2025-47273                  (HIGH)
 
 # ── AI providers ─────────────────────────────────────────────────────────────
-cross-ai-core[all]==2026.8.0   # AI provider stack (anthropic, openai, gemini, xai, perplexity; + ollama local/LAN)
+cross-ai-core[all]==2026.10.0   # AI provider stack (anthropic, openai, gemini, xai, perplexity; + ollama local/LAN)
 # anthropic/google-genai/openai are transitive deps of cross-ai-core; re-pinned
 # here explicitly so pip-audit and Dependabot can scan exact developer versions.
 anthropic==0.92.0
@@ -83,4 +83,4 @@ wyoming>=1.8.0
 python-dotenv==1.1.0         # .env file loading (all scripts)
 setuptools>=78.1.1           # CVE-2025-47273 — min version enforced
 urllib3>=2.6.3               # CVE-2025-50181/50182 etc — min version enforced
-yakyak==1.7.0                # TTS server client — st-prep.py, st-voice.py
+yakyak==1.8.0                # TTS server client — st-prep.py, st-voice.py

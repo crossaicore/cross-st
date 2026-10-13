@@ -81,10 +81,24 @@ def _no_traceback(result: subprocess.CompletedProcess):
 # ---------------------------------------------------------------------------
 
 @pytest.fixture()
-def pizza(tmp_path) -> Path:
-    """Copy pizza_dough.json into a temp dir so tests can write to it freely."""
+def pizza(tmp_path, monkeypatch) -> Path:
+    """Copy the report and restrict subprocess agents to its completed matrix."""
     dest = tmp_path / "pizza_dough.json"
     shutil.copy(_PIZZA, dest)
+    container = json.loads(dest.read_text())
+    makes = dict.fromkeys(report["make"] for report in container["story"])
+    registry = tmp_path / "agents.json"
+    registry.write_text(json.dumps({
+        "version": 2,
+        "agents": {make: {"provider": make, "model": None} for make in makes},
+        "_migrated_to_agents_v2": True,
+    }))
+    monkeypatch.setenv("CROSS_AI_AGENTS_FILE", str(registry))
+    # All fixture providers need to remain visible to key-based filtering.
+    # The completed matrix returns before any request; never use personal keys.
+    from cross_ai_core.keys import api_key_env_var
+    for make in makes:
+        monkeypatch.setenv(api_key_env_var(make), "fixture-only-not-a-real-key")
     return dest
 
 

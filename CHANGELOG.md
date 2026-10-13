@@ -11,6 +11,30 @@ Cross uses Calendar Versioning (`YYYY.M.R`).
 
 ---
 
+## [2026.10.0] — 2026-10-13
+
+### Fixed
+- Require `cross-ai-core[all]>=2026.10.0` so OpenAI requests use
+  `max_completion_tokens` and model sampling defaults, fixing GPT-6 Astra
+  failures caused by `max_tokens`, `temperature`, and `top_p`.
+- `st-post --help` and `st-analyze --help` now work before Discourse setup.
+
+### Added
+- Local Kokoro speech synthesis in `st-speak`, `st-prep --mp3`, and the
+  `st-voice` audition menu. Set `TTS_BACKEND=kokoro` and `TTS_VOICE=af_heart`
+  to use Heart; `heart` is also accepted as a voice alias.
+- Shared TTS routing with regression coverage for Kokoro, Wyoming-Piper,
+  voice overrides, quiet output, and server failures.
+
+### Changed
+- The optional TTS extra now requires YakYak 1.8.0 or later. Kokoro requires
+  Python 3.10–3.13 and downloads about 350 MB of assets on first use; MP3
+  output requires FFmpeg. Wyoming-Piper remains the default backend.
+- Updated audio documentation and the bundled `st-ask` help corpus.
+- Package project links now use the canonical `crossaicore` GitHub account.
+
+---
+
 ## [2026.9.0] — 2026-09-10
 
 ### Added

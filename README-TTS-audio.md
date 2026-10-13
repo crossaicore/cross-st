@@ -16,9 +16,39 @@ produces a broadcast-quality MP3 you can post to a podcast, YouTube, or social v
 
 ---
 
-## How it works
+## Local Kokoro with Heart
 
-Cross does not bundle a speech engine.  It connects over a local network socket to a
+Install the audio extra with `pipx install "cross-st[tts]"`, or run
+`pip install "cross-st[tts]"` in your virtual environment. Existing pipx users
+can upgrade with `pipx install --force "cross-st[tts]"`.
+
+Add these settings to `~/.crossenv` (or the developer checkout's `.env`):
+
+```dotenv
+TTS_BACKEND=kokoro
+TTS_VOICE=af_heart
+```
+
+Render a prepared report with `st-speak report.json`, or generate its audio
+during preparation with `st-prep --mp3 report.json`. `st-voice sample.txt`
+auditions the configured Kokoro voice. `heart` is accepted as an alias for
+`af_heart`; `st-speak --voice af_heart report.json` overrides the saved voice.
+
+Kokoro runs locally without a Piper server and ignores `TTS_HOST` and
+`TTS_PORT`. Use Python 3.10–3.13. YakYak downloads about 350 MB of model and
+voice data on first use into `~/.cache/yakyak/kokoro`; later renders reuse it.
+Set `YAKYAK_CACHE_DIR` to choose a different cache location. MP3 output needs
+FFmpeg (`brew install ffmpeg` on macOS, `sudo apt install ffmpeg` on Ubuntu).
+
+For Wyoming-Piper, set `TTS_BACKEND=wyoming` (the default), a Piper voice ID,
+and the server's `TTS_HOST` and `TTS_PORT`. The `st-voice --voices` and
+`--curl` commands list and download Piper voices.
+
+---
+
+## How Wyoming-Piper works
+
+When configured for Wyoming-Piper, Cross connects over a local network socket to a
 **Wyoming Piper TTS server** — an open-source, locally-running neural TTS service.
 The flow is:
 
@@ -56,8 +86,8 @@ See `tests/test_tts_stack.py` to reproduce on any machine.
 - `match`/`case` syntax in `st-plot.py` and `st-voice.py` is Python 3.10+ only
 - Python 3.9 is EOL (October 2025)
 
-**There is no upper limit for TTS.** The claim that TTS requires Python 3.11 on
-macOS ARM was incorrect and has been corrected throughout the codebase.
+Kokoro requires Python 3.10–3.13 because of its ONNX runtime dependency.
+Wyoming-Piper does not share that Kokoro restriction.
 
 **numpy version resolution note:** numpy 2.3.x raised its `Requires-Python` to `>=3.11`.
 On Python 3.10, `pip install "numpy>=2.2.4"` resolves to 2.2.x (the latest 3.10-compatible

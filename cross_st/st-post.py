@@ -35,7 +35,9 @@ def main():
     require_config()
     load_cross_env()
 
-    slugs, sites = get_discourse_slugs_sites()
+    # Help must be available before Discourse setup.
+    help_requested = any(flag in sys.argv[1:] for flag in ("-h", "--help"))
+    slugs, sites = ([], []) if help_requested else get_discourse_slugs_sites()
     default_site = slugs[0] if slugs else None
 
     parser = argparse.ArgumentParser(

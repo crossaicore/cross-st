@@ -1,6 +1,6 @@
 # st-voice — Browse, download, and test Piper TTS voice models
 
-Lists available TTS voices, prints download commands, and sets the active voice used by `st-speak`. The selected voice is saved to `TTS_VOICE` in your config.
+Auditions the configured TTS voice and lists or downloads Piper voices. Set `TTS_BACKEND=kokoro` and `TTS_VOICE=af_heart` to audition Heart locally. Save voice changes with `st-admin --set-tts-voice VOICE`; the audition menu does not save them automatically.
 
 **Related:** [st-speak](st-speak)  [st-admin](st-admin)  [TTS Audio](tts-audio)
 

@@ -17,7 +17,6 @@ Options: -d data  -a all  --markdown  --mp3  --title  --txt  --bang  -v  -q
 """
 
 import argparse
-import asyncio
 import hashlib
 import json
 import os
@@ -161,28 +160,8 @@ def main():
             print(f"Title: {file_title_content}")
 
     if args.mp3:
-        if not args.quiet:
-            print(f"Rendering voice: {file_mp3}")
-
-        try:
-            from yakyak import is_server_online, piper_tts_server
-        except ImportError:
-            print("Error: TTS packages not installed.  "
-                  "Run: pipx install --force \"cross-st[tts]\"",
-                  file=sys.stderr)
-            sys.exit(1)
-
-        host  = os.getenv("TTS_HOST")
-        port  = int(os.getenv("TTS_PORT"))
-        voice = os.getenv("TTS_VOICE")
-        if not is_server_online(host, port):
-            print(f"TTS host {host}:{port} is offline")
-        else:
-            asyncio.run(
-                piper_tts_server(host, port, as_spoken, file_mp3, "mp3", voice)
-            )
-            if not args.quiet:
-                print(f"Audio mp3 render complete")
+        from _tts import render_audio
+        render_audio(as_spoken, file_mp3, quiet=args.quiet, verbose=args.verbose)
 
     # Build a new story dictionary from the provided components
     story = {

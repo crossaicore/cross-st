@@ -1,4 +1,4 @@
-# corpus_version: 2026.9.0
+# corpus_version: 2026.10.0
 
 # Cross-st Help Content
 
@@ -4724,11 +4724,18 @@ All index arguments are 1-based, matching the output of st-ls.
 
 ### st-speak
 
-# st-speak — Render a story into spoken audio (MP3)
+# st-speak — Render a report into spoken audio (MP3)
 
-Renders a story as an MP3 audio file using text-to-speech. Requires the TTS extras to be installed.
+Renders a report as an MP3 audio file using local Kokoro or a Wyoming-Piper server. Requires the TTS extra to be installed.
 
 **Run after:** `st-prep`  ·  **Run before:** `st-post`
+
+## Kokoro setup
+
+Set `TTS_BACKEND=kokoro` and `TTS_VOICE=af_heart` in your Cross config to use
+Heart locally. Kokoro requires YakYak 1.8+, Python 3.10–3.13, and FFmpeg for
+MP3 output. The first render downloads about 350 MB of assets. See
+[TTS Audio](tts-audio) for installation and Wyoming-Piper setup.
 
 ## Examples
 
@@ -4747,7 +4754,7 @@ st-speak --voice en_US-ryan-high subject.json  # override voice for this render
 
 ## For developers
 
-Requires `pipx install 'cross-st[tts]'`. Uses `mmd_voice.py` which connects to a local Piper TTS server (`TTS_HOST`/`TTS_PORT` in `.env`). Exits cleanly with an error message if TTS dependencies are missing.
+Requires `pipx install 'cross-st[tts]'`. Uses `_tts.py` to select Kokoro or Wyoming-Piper from `TTS_BACKEND`. Only Wyoming-Piper needs `TTS_HOST` and `TTS_PORT`. Exits cleanly with an error message if TTS dependencies are missing.
 
 ## Additional current options
 
@@ -5129,7 +5136,7 @@ Built on `mmd_plot.py`. Data comes from `mmd_data_analysis.get_flattened_fc_data
 
 # st-voice — Browse, download, and test Piper TTS voice models
 
-Lists available TTS voices, prints download commands, and sets the active voice used by `st-speak`. The selected voice is saved to `TTS_VOICE` in your config.
+Auditions the configured TTS voice and lists or downloads Piper voices. Set `TTS_BACKEND=kokoro` and `TTS_VOICE=af_heart` to audition Heart locally. Save voice changes with `st-admin --set-tts-voice VOICE`; the audition menu does not save them automatically.
 
 **Related:** [st-speak](st-speak)  [st-admin](st-admin)  [TTS Audio](tts-audio)
 
@@ -5252,7 +5259,37 @@ work without it.  TTS adds three commands: `st-speak`, `st-voice`, and
 
 ---
 
-## Quick start
+## Local Kokoro with Heart
+
+Install the audio extra with `pipx install "cross-st[tts]"`, or run
+`pip install "cross-st[tts]"` in your virtual environment. Existing pipx users
+can upgrade with `pipx install --force "cross-st[tts]"`.
+
+Add these settings to `~/.crossenv` (or the developer checkout's `.env`):
+
+```dotenv
+TTS_BACKEND=kokoro
+TTS_VOICE=af_heart
+```
+
+Render a prepared report with `st-speak report.json`, or generate its audio
+during preparation with `st-prep --mp3 report.json`. `st-voice sample.txt`
+auditions the configured Kokoro voice. `heart` is accepted as an alias for
+`af_heart`; `st-speak --voice af_heart report.json` overrides the saved voice.
+
+Kokoro runs locally without a Piper server and ignores `TTS_HOST` and
+`TTS_PORT`. Use Python 3.10–3.13. YakYak downloads about 350 MB of model and
+voice data on first use into `~/.cache/yakyak/kokoro`; later renders reuse it.
+Set `YAKYAK_CACHE_DIR` to choose a different cache location. MP3 output needs
+FFmpeg (`brew install ffmpeg` on macOS, `sudo apt install ffmpeg` on Ubuntu).
+
+For Wyoming-Piper, set `TTS_BACKEND=wyoming` (the default), a Piper voice ID,
+and the server's `TTS_HOST` and `TTS_PORT`. The `st-voice --voices` and
+`--curl` commands list and download Piper voices.
+
+---
+
+## Wyoming-Piper quick start
 
 ```bash
 # 1. Install Cross with audio support
@@ -5287,7 +5324,7 @@ The table below reflects **live install and import tests on macOS ARM, 2026-03-3
 | 3.13   | ✅ | ✅ | 2.4.4 — 18/18 packages pass import test |
 
 The minimum of 3.10 is set by `numpy 2.x`, `scipy 1.15.x`, and `match`/`case`
-syntax in `st-plot.py` and `st-voice.py`. There is no ceiling.
+syntax in `st-plot.py` and `st-voice.py`. Kokoro requires Python 3.10–3.13.
 
 > **numpy note:** numpy 2.3.x raised `Requires-Python` to `>=3.11`. On Python 3.10,
 > pip automatically resolves to numpy 2.2.x — no manual pinning needed.
@@ -5907,7 +5944,7 @@ Source: `cross_st/st-speak.py`.
 - `json_file`: Path to the JSON file
 - `-s`, `--story`: Story to convert (integer), default 1
 - `--source`: Select text source. Options: 'text' (default) or 'fact'.
-- `--voice`: Onnx voice model
+- `--voice`: Voice ID for the configured TTS backend (for example af_heart)
 - `-v`, `--verbose`: Enable verbose output, default is verbose
 - `-q`, `--quiet`: Enable minimal output
 
@@ -6026,6 +6063,30 @@ Cross uses Calendar Versioning (`YYYY.M.R`).
 ---
 
 ## [Unreleased]
+
+---
+
+## [2026.10.0] — 2026-10-13
+
+### Fixed
+- Require `cross-ai-core[all]>=2026.10.0` so OpenAI requests use
+  `max_completion_tokens` and model sampling defaults, fixing GPT-6 Astra
+  failures caused by `max_tokens`, `temperature`, and `top_p`.
+- `st-post --help` and `st-analyze --help` now work before Discourse setup.
+
+### Added
+- Local Kokoro speech synthesis in `st-speak`, `st-prep --mp3`, and the
+  `st-voice` audition menu. Set `TTS_BACKEND=kokoro` and `TTS_VOICE=af_heart`
+  to use Heart; `heart` is also accepted as a voice alias.
+- Shared TTS routing with regression coverage for Kokoro, Wyoming-Piper,
+  voice overrides, quiet output, and server failures.
+
+### Changed
+- The optional TTS extra now requires YakYak 1.8.0 or later. Kokoro requires
+  Python 3.10–3.13 and downloads about 350 MB of assets on first use; MP3
+  output requires FFmpeg. Wyoming-Piper remains the default backend.
+- Updated audio documentation and the bundled `st-ask` help corpus.
+- Package project links now use the canonical `crossaicore` GitHub account.
 
 ---
 

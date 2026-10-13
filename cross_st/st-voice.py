@@ -21,7 +21,9 @@ The interactive V key in st-admin opens this tool.  Once you have found the
 right voice, save it with:
   st-admin --set-tts-voice en_US-lessac-medium
 
-Use st-speak to render a full story container to MP3 with the saved voice.
+For local Kokoro, set TTS_BACKEND=kokoro and TTS_VOICE=af_heart.
+Kokoro auditioning uses the configured voice; voice browsing is for Piper.
+Use st-speak to render a full report container to MP3 with the saved voice.
 
 TTS is optional — without it, use requirements-no-tts.txt and Python 3.10+.
 With TTS, Python 3.10–3.13 all work (soundfile and yakyak have wheels for
@@ -32,38 +34,21 @@ See also: st-admin (set default TTS voice)
 """
 
 import argparse
-import asyncio
 import os
 import subprocess
 import sys
 import time
 from mmd_startup import load_cross_env, require_config
 
-try:
-    from yakyak import is_server_online
-    from yakyak import piper_tts_server
-except ImportError:
-    print("Error: st-voice requires TTS packages.  "
-          "Run: pipx install --force \"cross-st[tts]\"",
-          file=sys.stderr)
-    sys.exit(1)
+from _tts import get_backend, get_voice, render_audio
 
 from mmd_for_speaking import for_speaking
 from mmd_voice import get_onyx_voice_list, get_onyx_voice_curl, get_onyx_voice_list_best_few
 
 
 def render_voice(text_content, file_mp3, host, port, voice, verbose):
-    if not is_server_online(host, port):
-        print(f"TTS host {host}:{port} is offline")
-    else:
-        if verbose:
-            print(f"TTS host {host}:{port} voice:{voice}")
-            print(f"Rendering audio")
-        asyncio.run(
-            piper_tts_server(host, port, text_content, file_mp3, "mp3", voice)
-        )
-        if not verbose:
-            print(f"Audio mp3 render complete")
+    return render_audio(text_content, file_mp3, voice, host=host, port=port,
+                        verbose=verbose)
 
 
 def find_and_kill_process(port):
@@ -135,7 +120,7 @@ def main():
     # Use realpath to get the actual path of the script
     load_cross_env()
 
-    tts_voice = os.getenv("TTS_VOICE")
+    tts_voice = get_voice()
 
     try:
         if not os.path.isfile(file_txt):
@@ -149,7 +134,8 @@ def main():
         print(f"An unexpected error occurred: {e}")
         sys.exit(1)
 
-    voice_opt = get_onyx_voice_list_best_few()
+    voice_opt = ([tts_voice] if get_backend() == "kokoro"
+                 else get_onyx_voice_list_best_few())
     voice_select = 0
 
     def get_state():
@@ -163,7 +149,7 @@ def main():
             "quit",
             f"vi {file_txt}",
             f"filter text for_speaking(text)",
-            f"yakyak -i {file_txt} -f mp3 -v {tts_voice} -o {file_mp3}",
+            f"yakyak --backend {get_backend()} -i {file_txt} -f mp3 -v {tts_voice} -o {file_mp3}",
             f"next voice",
             f"kill lame gimp server on port 6419",
             f"help",
@@ -208,10 +194,11 @@ def main():
                     f.write(text_content)
                 continue
             case 's':  # render the mp3 with yakyak TTS + afplay
-                cmd = next_app[3].split()
-                subprocess.run(cmd)
-                cmd = f"afplay {file_mp3}".split()
-                subprocess.run(cmd)
+                with open(file_txt) as infile:
+                    text_content = infile.read()
+                if render_audio(text_content, file_mp3, tts_voice,
+                                quiet=args.quiet, verbose=args.verbose):
+                    subprocess.run(["afplay", file_mp3])
                 continue
             case 'v':  # Switch to next voice
                 voice_select = (voice_select + 1) % len(voice_opt)

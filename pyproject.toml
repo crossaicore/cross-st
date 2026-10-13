@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 # ─────────────────────────────────────────────────────────────────────────────
 [project]
 name            = "cross-st"
-version         = "2026.9.0"
+version         = "2026.10.0"
 description     = "AI reports. Cross-examined. Research reports from multiple AI providers, fact-checked against each other."
 readme          = "README.md"
 license         = "MIT"
@@ -40,7 +40,7 @@ classifiers = [
 # ─────────────────────────────────────────────────────────────────────────────
 dependencies = [
     # AI stack (providers, cache, error handling)
-    "cross-ai-core[all]>=2026.8.0",
+    "cross-ai-core[all]>=2026.10.0",
     # Discourse posting
     "pydiscourse>=1.7.0",
     "requests>=2.32.4",           # CVE-2024-47081
@@ -86,7 +86,7 @@ tts = [
     "soundfile>=0.13.1",
     "websockets>=15.0.1",
     "wyoming>=1.8.0",
-    "yakyak>=1.7.0",
+    "yakyak>=1.8.0",
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -105,8 +105,8 @@ pdf = [
 
 [project.urls]
 Homepage       = "https://crossai.dev"
-Repository     = "https://github.com/b202i/cross-st"
-"Bug Tracker"  = "https://github.com/b202i/cross-st/issues"
+Repository     = "https://github.com/crossaicore/cross-st"
+"Bug Tracker"  = "https://github.com/crossaicore/cross-st/issues"
 Documentation  = "https://crossai.dev"
 
 # ─────────────────────────────────────────────────────────────────────────────
