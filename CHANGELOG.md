@@ -10,6 +10,9 @@ Cross uses Calendar Versioning (`YYYY.M.R`).
 ## [Unreleased]
 
 ### Fixed
+- Audio commands automatically disable ONNX Runtime telemetry before loading
+  speech libraries, preventing the telemetry device-ID warning without requiring
+  users to set an environment variable.
 - `st-speak -s N` now selects the same one-based report index as `st-ls` and
   the interactive menu. Previously it read the next report or failed at the end
   of the list. Invalid indices and missing spoken text fail before rendering.

@@ -23,6 +23,8 @@ def render_audio(text, output_file, voice=None, *, quiet=False, verbose=False,
     """Write MP3 audio; return False when the Wyoming server is offline."""
     backend = get_backend()
     voice = get_voice(voice)
+    # ONNX initializes telemetry when speech libraries load; disable it first.
+    os.environ["ORT_DISABLE_TELEMETRY"] = "1"
     try:
         if backend == "kokoro":
             from yakyak import kokoro_tts_server

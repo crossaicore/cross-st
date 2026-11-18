@@ -1,6 +1,8 @@
 """Audio routing checks without model downloads, servers, or playback."""
+import builtins
 import importlib.util
 import json
+import os
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -15,10 +17,34 @@ import _tts
 def speech(monkeypatch):
     for key in ("TTS_BACKEND", "TTS_VOICE", "TTS_HOST", "TTS_PORT"):
         monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("ORT_DISABLE_TELEMETRY", "0")
     api = SimpleNamespace(kokoro_tts_server=AsyncMock(),
                           piper_tts_server=AsyncMock(), is_server_online=Mock(return_value=True))
     monkeypatch.setitem(sys.modules, "yakyak", api)
     return api
+
+
+@pytest.mark.parametrize("backend", ["kokoro", "wyoming"])
+@pytest.mark.parametrize("inherited", [None, "0", "1"])
+def test_telemetry_disabled_before_loading_speech(speech, monkeypatch, backend, inherited):
+    monkeypatch.setenv("TTS_BACKEND", backend)
+    if inherited is not None:
+        monkeypatch.setenv("ORT_DISABLE_TELEMETRY", inherited)
+    else:
+        monkeypatch.delenv("ORT_DISABLE_TELEMETRY")
+    original_import = builtins.__import__
+    speech_imports = []
+
+    def checked_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "yakyak":
+            assert os.environ.get("ORT_DISABLE_TELEMETRY") == "1"
+            speech_imports.append(name)
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", checked_import)
+    assert _tts.render_audio("Sample", "sample.mp3", quiet=True,
+                             host="localhost", port=10200)
+    assert speech_imports
 
 
 @pytest.mark.parametrize("saved,override,expected", [

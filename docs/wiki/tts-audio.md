@@ -7,6 +7,11 @@ Cross can convert any research report into a spoken MP3 file.  This is
 work without it.  TTS adds three commands: `st-speak`, `st-voice`, and
 `st-prep --mp3`.
 
+Cross automatically disables ONNX Runtime telemetry before loading speech
+libraries. No environment-variable prefix or configuration change is needed.
+This applies to audio rendered inside Cross; a separately running Piper server
+manages its own runtime settings.
+
 ---
 
 ## Local Kokoro with Heart
