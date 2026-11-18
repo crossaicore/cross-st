@@ -10,6 +10,10 @@ Cross uses Calendar Versioning (`YYYY.M.R`).
 ## [Unreleased]
 
 ### Fixed
+- `st-fetch --url` requests Markdown and follows advertised Markdown versions,
+  preserving the complete response. HTML fallback now retains links, images,
+  headings, lists, and tables as Markdown instead of flattening them to text.
+  Clipboard imports and `st-prep` also preserve source Markdown formatting.
 - `st-prep` preserves titles saved by `st-fetch` and extracts fallback titles
   before joining text lines, preventing page content from becoming the title.
 - Audio commands automatically disable ONNX Runtime telemetry before loading

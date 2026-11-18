@@ -3782,8 +3782,33 @@ Five source types are supported: a tweet by ID, a local `.txt` or `.md` file, a 
 | X / Twitter post | `tweet_id` (positional) | Requires `X_COM_BEARER_TOKEN` in `.env` |
 | Plain text or Markdown file | `--file PATH` | `.txt`, `.md` — content imported as-is |
 | PDF file | `--file PATH` | Auto-detected by `.pdf` extension or `%PDF` magic bytes; `pymupdf4llm` auto-installed on first use |
-| Web page | `--url URL` | Scrapes visible text; strips nav/script/footer noise |
+| Web page / Markdown URL | `--url URL` | Prefers source Markdown; converts HTML with links, images, and formatting preserved |
 | Clipboard | `--clipboard` | macOS (`pbpaste`), Linux (`xclip`/`xsel`), Windows (PowerShell) |
+
+### Web and Markdown import
+
+`st-fetch --url URL article.json` requests Markdown from the server first. If
+the server returns HTML advertising a Markdown version, Cross fetches that
+version automatically. This works with Discourse topic URLs without adding
+`.md` yourself.
+
+The complete returned Markdown is saved unchanged in `data[].markdown` and
+`data[].gen_response.raw`. Links, images, lists, tables, code blocks, paragraph
+breaks, and horizontal rules remain intact. `st-prep` preserves that Markdown
+when creating the report and appends Cross attribution. Plain text and spoken
+text are separate derived fields; use the Markdown view or export to retain
+formatting.
+
+For HTML-only pages, Cross converts the returned HTML to Markdown, preserving
+visible content and link/image destinations. Relative URLs are resolved against
+the page URL (or its HTML base URL). Scripts and styles are excluded from the
+conversion; the original HTML is retained in `data[].gen_response.html`.
+Conversion support installs automatically on first use.
+
+Import covers the response returned by the requested page. It does not follow
+outbound recipe/article links, fetch additional pages, or execute JavaScript to
+load more content. Markdown preserves the source response exactly; HTML
+conversion preserves supported structure rather than the site's visual layout.
 
 ### PDF import
 
@@ -3812,9 +3837,10 @@ source  →  st-fetch  →  article.json  →  st-prep  →  st-fact / st-post /
 
 Use `--no-prep` to store the raw data entry only and run `st-prep` yourself later.
 
-The output container filename is required, including with `--url`. Web imports
-prefer the page's first `<h1>` for the title, falling back to its HTML `<title>`
-and then the URL. `st-prep` preserves this saved title when creating the report.
+The output container filename is required, including with `--url`. Markdown
+imports use the first top-level heading for the title, falling back to the first
+non-empty line. HTML imports prefer the page's first `<h1>`, then its HTML
+`<title>`, then the URL. `st-prep` preserves the saved title.
 
 ---
 
@@ -3825,7 +3851,7 @@ st-fetch <tweet_id> article.json              # import an X / Twitter post
 st-fetch --file report.txt article.json       # import a plain text file
 st-fetch --file report.md article.json        # import a Markdown file
 st-fetch --file paper.pdf article.json        # import a PDF
-st-fetch --url https://... article.json       # scrape a web page
+st-fetch --url https://... article.json       # import Markdown or a web page
 st-fetch --clipboard article.json             # import from clipboard
 
 st-fetch --file paper.pdf article.json --no-prep     # store raw data only
@@ -6437,7 +6463,7 @@ Source: `cross_st/st-fact.py`.
 Source: `cross_st/st-fetch.py`.
 
 - `--file`: Import a plain text, markdown, or PDF file from disk
-- `--url`: Fetch a web page and extract its text
+- `--url`: Import Markdown or convert HTML, preserving links and formatting
 - `--clipboard`: Import text from the system clipboard
 - `tweet_id`: Tweet ID to fetch from X (numeric ID from post URL)
 - `json_file`: Path to the .json container
@@ -6810,6 +6836,10 @@ Cross uses Calendar Versioning (`YYYY.M.R`).
 ## [Unreleased]
 
 ### Fixed
+- `st-fetch --url` requests Markdown and follows advertised Markdown versions,
+  preserving the complete response. HTML fallback now retains links, images,
+  headings, lists, and tables as Markdown instead of flattening them to text.
+  Clipboard imports and `st-prep` also preserve source Markdown formatting.
 - `st-prep` preserves titles saved by `st-fetch` and extracts fallback titles
   before joining text lines, preventing page content from becoming the title.
 - Audio commands automatically disable ONNX Runtime telemetry before loading

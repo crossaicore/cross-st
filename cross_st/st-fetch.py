@@ -4,7 +4,7 @@
 
 Brings existing content into the Cross pipeline for fact-checking, improvement,
 and publishing.  Content is stored as a data entry and immediately converted to
-a story entry via st-prep (use --no-prep to store as raw data only).
+a report entry via st-prep (use --no-prep to store as raw data only).
 
 Each fetched entry records its origin in make/model:
   make = "st-fetch"  (always)
@@ -14,7 +14,7 @@ Each fetched entry records its origin in make/model:
 Sources supported:
   tweet_id    Fetch a post from X (Twitter) by numeric tweet ID
   --file      Import a plain text, markdown, or PDF file from disk
-  --url       Fetch a web page by URL (scrapes visible text)
+  --url       Import Markdown from a URL; convert HTML when Markdown is unavailable
   --clipboard Paste text directly from the system clipboard
 
 ```
@@ -49,8 +49,10 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
+from urllib.parse import urljoin, urlsplit
 from mmd_startup import load_cross_env, require_config
 
 
@@ -179,10 +181,81 @@ def _fetch_file(filepath, verbose):
     return title, text, response
 
 
-def _fetch_url(url, verbose):
-    """Fetch a web page and extract visible text. Returns (title, text, raw_response)."""
+def _is_markdown_response(response):
+    media_type = response.headers.get("Content-Type", "").split(";")[0].strip().lower()
+    return media_type in {"text/markdown", "text/x-markdown"} or (
+        media_type in {"text/plain", "application/octet-stream", ""}
+        and urlsplit(response.url).path.lower().endswith((".md", ".markdown"))
+    )
+
+
+def _markdown_url_result(response, requested_url, title=None):
+    """Keep the complete Markdown response; derive plain text separately."""
+    raw = response.text
+    if not title:
+        heading = re.search(r"^#\s+(.+?)\s*#*\s*$", raw, re.MULTILINE)
+        title = (heading.group(1) if heading else next(
+            (line.strip() for line in raw.splitlines() if line.strip()), requested_url))
+        title = remove_markdown(title)[:120]
+    return title, remove_markdown(raw), {
+        "source": "url", "url": requested_url, "fetched_url": response.url,
+        "status_code": response.status_code, "format": "markdown", "raw": raw,
+    }
+
+
+def _html_markdown(soup, base_url):
     try:
-        import requests
+        from markdownify import markdownify
+    except ImportError:
+        print("  HTML-to-Markdown support not installed — installing now (one-time)…", flush=True)
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--quiet", "markdownify>=1.2"],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            raise SystemExit("Error: auto-install of markdownify failed.\n" +
+                             (result.stderr or "(no output)")[-400:].strip())
+        from markdownify import markdownify
+        print("  HTML-to-Markdown support installed. ✓", flush=True)
+
+    base = soup.find("base", href=True)
+    if base:
+        base_url = urljoin(base_url, base["href"])
+    # Keep visible content, including links inside article headers and footers.
+    for tag in soup(["script", "style"]):
+        tag.decompose()
+    for tag in soup.find_all(True):
+        for attribute in ("href", "src", "poster"):
+            if tag.get(attribute):
+                tag[attribute] = urljoin(base_url, tag[attribute])
+    return markdownify(str(soup.body or soup), heading_style="ATX",
+                       keep_inline_images_in=["a", "td", "th", "h1", "h2", "h3", "h4", "h5", "h6"])
+
+
+def _fetch_url(url, verbose, *, quiet=False):
+    """Prefer source Markdown, otherwise convert HTML without discarding links."""
+    import requests
+
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; cross-fetch/1.0)",
+               "Accept": "text/markdown, text/html;q=0.9, text/plain;q=0.8, */*;q=0.1"}
+    if verbose:
+        print(f"  Fetching URL: {url}")
+    try:
+        resp = requests.get(url, timeout=15, headers=headers)
+        resp.raise_for_status()
+    except requests.RequestException as error:
+        raise SystemExit(f"Error fetching URL: {error}") from error
+
+    if _is_markdown_response(resp):
+        return _markdown_url_result(resp, url)
+
+    # Plain-text sources must not be parsed as HTML (which can eat <...> text).
+    if resp.headers.get("Content-Type", "").split(";")[0].strip().lower() == "text/plain":
+        title, text, response = _markdown_url_result(resp, url)
+        response["format"] = "text"
+        return title, text, response
+
+    try:
         from bs4 import BeautifulSoup
     except ImportError:
         print("  Web scraping support not installed — installing now (one-time, ~1 MB)…", flush=True)
@@ -195,38 +268,35 @@ def _fetch_url(url, verbose):
             print("Error: auto-install of beautifulsoup4 failed.")
             print(result.stderr[-400:].strip() if result.stderr else "(no output)")
             sys.exit(1)
-        import requests          # noqa: F811
         from bs4 import BeautifulSoup  # noqa: F811
         print("  Web scraping support installed. ✓", flush=True)
 
-    if verbose:
-        print(f"  Fetching URL: {url}")
-    try:
-        resp = requests.get(url, timeout=15,
-                            headers={"User-Agent": "Mozilla/5.0 (compatible; cross-fetch/1.0)"})
-        resp.raise_for_status()
-    except Exception as e:
-        print(f"Error fetching URL: {e}")
-        sys.exit(1)
-
     soup = BeautifulSoup(resp.text, "html.parser")
-    # Remove script/style noise
-    for tag in soup(["script", "style", "nav", "footer", "header"]):
-        tag.decompose()
-
-    page_title = soup.title.string.strip() if soup.title else ""
+    page_title = soup.title.get_text(" ", strip=True) if soup.title else ""
     # Prefer <h1> as title
     h1 = soup.find("h1")
     if h1:
-        page_title = h1.get_text(strip=True) or page_title
+        page_title = h1.get_text(" ", strip=True) or page_title
 
-    text = soup.get_text(separator="\n", strip=True)
-    # Collapse excessive blank lines
-    import re
-    text = re.sub(r'\n{3,}', '\n\n', text)
+    alternate = soup.find("link", rel="alternate", type="text/markdown", href=True)
+    if alternate:
+        markdown_url = urljoin(resp.url, alternate["href"])
+        if urlsplit(markdown_url).scheme in {"http", "https"}:
+            try:
+                markdown_response = requests.get(markdown_url, timeout=15, headers=headers)
+                markdown_response.raise_for_status()
+                if _is_markdown_response(markdown_response):
+                    return _markdown_url_result(markdown_response, url, page_title or None)
+            except requests.RequestException:
+                pass
+            if not quiet:
+                print("  Markdown version unavailable; converting the HTML page instead.", flush=True)
 
-    response = {"source": "url", "url": url, "status_code": resp.status_code}
-    return page_title or url, text, response
+    markdown = _html_markdown(soup, resp.url)
+    response = {"source": "url", "url": url, "fetched_url": resp.url,
+                "status_code": resp.status_code, "format": "html",
+                "raw": markdown, "html": resp.text}
+    return page_title or url, remove_markdown(markdown), response
 
 
 def _fetch_clipboard(verbose):
@@ -308,7 +378,7 @@ def main():
     source_group.add_argument('--file', type=str, metavar='PATH',
                                help='Import a plain text, markdown, or PDF file from disk')
     source_group.add_argument('--url', type=str, metavar='URL',
-                               help='Fetch a web page and extract its text')
+                               help='Import Markdown or convert HTML, preserving links and formatting')
     source_group.add_argument('--clipboard', action='store_true',
                                help='Import text from the system clipboard')
 
@@ -355,7 +425,7 @@ def main():
     elif args.url:
         if not args.quiet:
             print(f"  Fetching URL…", end='', flush=True)
-        title, text, response = _fetch_url(args.url, args.verbose)
+        title, text, response = _fetch_url(args.url, args.verbose, quiet=args.quiet)
         # Use the domain as the model (e.g. "reddit.com", "bbc.co.uk")
         from urllib.parse import urlparse
         _netloc = urlparse(args.url).netloc.lower()
@@ -418,9 +488,8 @@ def main():
 
     # ── Build data entry ──────────────────────────────────────────────────────
     ai_tag = get_app_tag() + f"{source_make}:{source_model}"
-    # For PDF imports, response["raw"] holds the Markdown output; for other
-    # file sources it holds the original raw text. Fall back to plain text.
-    markdown_content = response.get("raw", text) if source_model in ("file", "pdf") else text
+    # Preserve source Markdown for URLs, files, PDFs, and clipboard imports.
+    markdown_content = response.get("raw", text)
     data = {
         "make":         source_make,
         "model":        source_model,

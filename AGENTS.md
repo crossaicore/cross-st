@@ -335,7 +335,7 @@ Small packages (<2 MB) can use a generic message without the size.
 | Script | Feature | Package(s) | Size | Treatment |
 |--------|---------|-----------|------|-----------|
 | `st-fetch.py` | PDF `--file` | `pymupdf4llm` (+ `pymupdf`) | ~22 MB | **Auto-install** ✅ |
-| `st-fetch.py` | Web `--url` | `beautifulsoup4` | ~1 MB | **Auto-install** ✅ |
+| `st-fetch.py` | Web `--url` HTML fallback | `beautifulsoup4`, `markdownify>=1.2` | ~1 MB | **Auto-install** ✅; native Markdown needs neither |
 | `st-edit.py` | Browser preview | `grip` | ~2 MB | **Auto-install** ✅ |
 | `st-print.py` | Markdown → PDF | `weasyprint` | core dep | Native OS libs required — platform hints |
 | `st-speak.py` `st-voice.py` `st-prep.py` | TTS audio | `yakyak` + 5 others | varies | Server required — `[tts]` extras + error message |

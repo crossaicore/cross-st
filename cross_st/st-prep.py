@@ -26,6 +26,7 @@ from mmd_startup import load_cross_env, require_config
 
 
 from ai_handler import get_data_content, get_ai_list
+from ai_url import AI_MAKE as FETCH_MAKE
 from mmd_branding import get_speaking_tagline, get_tagline_for_reading
 from mmd_for_speaking import for_speaking
 from mmd_process_report import (
@@ -137,7 +138,9 @@ def main():
                           if select_data.get("data_id") and r.get("source_data_id") == select_data["data_id"]), None)
 
     # Massage raw data into a publishable report
-    file_md_content = remove_story_break(all_raw_story_text)
+    # Imported Markdown is source content: preserve rules and setext headings.
+    file_md_content = (all_raw_story_text if select_make in {FETCH_MAKE, "url"}
+                       else remove_story_break(all_raw_story_text))
 
     select_hashtags = get_hashtags(file_md_content)
 

@@ -346,7 +346,8 @@ def test_fetch_url_title_survives_preparation(tmp_path, monkeypatch, capsys):
     <body><h1>Green Bean Casserole</h1><p>Food</p><p>Author and date</p>
     <p>A report with ingredients and cooking directions.</p></body></html>"""
     monkeypatch.setattr(requests, "get", lambda *a, **kw: SimpleNamespace(
-        text=html, status_code=200, raise_for_status=lambda: None))
+        text=html, status_code=200, headers={"Content-Type": "text/html"},
+        url="https://example.test/t/green-bean-casserole/494", raise_for_status=lambda: None))
     for command in (fetch, prep):
         monkeypatch.setattr(command, "load_cross_env", lambda: None)
         monkeypatch.setattr(command, "require_config", lambda: None)
