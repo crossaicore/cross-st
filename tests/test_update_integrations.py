@@ -220,7 +220,8 @@ def test_edit_speech_removes_attribution_and_changes_hash():
     assert result['md5_hash'] != 'old'
 
 
-def test_menu_update_keeps_selected_report(report_file, monkeypatch):
+@pytest.mark.parametrize('key,iterate', [('u', ''), ('U', ' --iterate 2')])
+def test_menu_update_keeps_selected_report(report_file, monkeypatch, key, iterate):
     import discourse
     import mmd_startup
     monkeypatch.setattr(discourse, 'get_discourse_slugs_sites', lambda: ([], []))
@@ -230,8 +231,8 @@ def test_menu_update_keeps_selected_report(report_file, monkeypatch):
     mod.story_sel = 2
     mod.fact_sel = 1
     mod.ai = 'chosen-agent'
-    mod.execute_menu('Edit', 'u')
-    assert mod.cmd == f'st-update --agent chosen-agent -s 2 {report_file}'
+    mod.execute_menu('Edit', key)
+    assert mod.cmd == f'st-update --agent chosen-agent -s 2{iterate} {report_file}'
     mod.refresh_state()
     assert mod.story_sel == 2
     assert 'st-update' in mod.POST_CMD_REFRESH and 'st-edit' in mod.POST_CMD_REFRESH

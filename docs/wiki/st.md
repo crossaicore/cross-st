@@ -23,6 +23,12 @@ Press a letter to enter a submenu, then a second letter to build the command. Pr
 
 ## Keyboard shortcuts
 
+In the **Edit** menu, `u` updates the selected report into a new report. Capital
+`U` iterates on the selected report using `-s N --iterate N` and the selected
+agent. It follows [st-update's iteration rules](st-update): the first update
+ignores `--iterate` and appends; later iterations require a saved update request.
+Press `RETURN` to run the constructed command.
+
 These work at any menu level, at any time:
 
 | Key | Action |

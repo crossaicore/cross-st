@@ -103,7 +103,8 @@ menus = {
             "f": "List fact-checks",
         }),
         "e": ("Edit", {
-            "u": "Update selected report from a new request",
+            "u": "Update selected report into a new report",
+            "U": "Iterate update on selected report (replace it)",
             "T": "Edit title",
             "m": "Edit markdown",
             "M": "Edit markdown with browser view",
@@ -310,6 +311,8 @@ def execute_menu(menu_name, choice):
             match choice:
                 case "u":
                     cmd = f"st-update --agent {ai} -s {story_sel} {file_json}"
+                case "U":
+                    cmd = f"st-update --agent {ai} -s {story_sel} --iterate {story_sel} {file_json}"
                 case "T":
                     cmd = f"st-edit --title -s {story_sel} {file_json}"
                 case "m":

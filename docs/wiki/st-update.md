@@ -11,6 +11,11 @@ st-update -s 2 --iterate 2 report.json    # use edited output 2 as its own sourc
 
 ## Select the source and output
 
+In `st` → Edit, `u` builds an update that creates a new report from the selected
+report. Capital `U` builds `st-update -s N --iterate N` with the selected agent,
+using the selected report as both source and replacement output. Both shortcuts
+follow the selection and first-update rules below.
+
 `-s N` selects the existing source report. It is required when the container has multiple reports. Run `st-ls report.json` to inspect the current indices. A normal update appends a raw generation entry and prepared report; Cross prints the assigned output index.
 
 `--iterate N` selects an existing update output to replace. Its saved update request opens in your editor so you can refine it. Both replacement entries are prepared before they are saved together. Successful iteration discards that output's previous content and raw response. Omit `--iterate` to retain them and append another output.

@@ -26,6 +26,8 @@ Cross uses Calendar Versioning (`YYYY.M.R`).
   render returns a nonzero status so the menu does not play an older MP3.
 
 ### Added
+- The interactive Edit menu offers `u` to append an updated report and `U` to
+  iterate on the selected report with `-s N --iterate N`.
 - `st-update` generates an updated report from saved Markdown, an authored request,
   and optional local evidence. Append a new output or replace an existing update
   with `--iterate N`; review actual changes with concise or detailed summaries.

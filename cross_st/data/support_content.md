@@ -5686,6 +5686,11 @@ st-update -s 2 --iterate 2 report.json    # use edited output 2 as its own sourc
 
 ## Select the source and output
 
+In `st` → Edit, `u` builds an update that creates a new report from the selected
+report. Capital `U` builds `st-update -s N --iterate N` with the selected agent,
+using the selected report as both source and replacement output. Both shortcuts
+follow the selection and first-update rules below.
+
 `-s N` selects the existing source report. It is required when the container has multiple reports. Run `st-ls report.json` to inspect the current indices. A normal update appends a raw generation entry and prepared report; Cross prints the assigned output index.
 
 `--iterate N` selects an existing update output to replace. Its saved update request opens in your editor so you can refine it. Both replacement entries are prepared before they are saved together. Successful iteration discards that output's previous content and raw response. Omit `--iterate` to retain them and append another output.
@@ -5943,6 +5948,12 @@ The menus follow the natural top-down workflow:
 Press a letter to enter a submenu, then a second letter to build the command. Press `RETURN` to run it, `ESC` to go back.
 
 ## Keyboard shortcuts
+
+In the **Edit** menu, `u` updates the selected report into a new report. Capital
+`U` iterates on the selected report using `-s N --iterate N` and the selected
+agent. It follows [st-update's iteration rules](st-update): the first update
+ignores `--iterate` and appends; later iterations require a saved update request.
+Press `RETURN` to run the constructed command.
 
 These work at any menu level, at any time:
 
@@ -6852,6 +6863,8 @@ Cross uses Calendar Versioning (`YYYY.M.R`).
   render returns a nonzero status so the menu does not play an older MP3.
 
 ### Added
+- The interactive Edit menu offers `u` to append an updated report and `U` to
+  iterate on the selected report with `-s N --iterate N`.
 - `st-update` generates an updated report from saved Markdown, an authored request,
   and optional local evidence. Append a new output or replace an existing update
   with `--iterate N`; review actual changes with concise or detailed summaries.
