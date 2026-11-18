@@ -3,14 +3,14 @@
 st-cross — Run all AI providers and cross-check results
 
 Step 1: Generate N stories, one per AI (via st-gen --prep), in parallel.
-Step 2: Fact-check all N stories with all N AIs — N×N jobs.
+Step 2: Fact-check every saved report with every configured checking agent.
         Every cell (story × fact-checker) runs in its own daemon thread,
         invoking `st-fact` as a subprocess for crash isolation. A per-provider
         semaphore (see `--max-concurrency` and `get_rate_limit_concurrency()`)
         caps simultaneous calls to any single AI provider to respect rate
         limits. Subprocess isolation keeps JSON writes safe across cells.
 
-Result: an N×N cross-product table saved into the .json container.
+Result: a reports × agents cross-product table saved into the .json container.
 
 Live display: a 2D ANSI table updated every second.
   Rows    = stories (report-generator AI)
@@ -28,6 +28,7 @@ import subprocess
 import sys
 import threading
 import time
+from _report_store import load_snapshot, save_snapshot, StoreError
 from mmd_startup import require_config
 from pathlib import Path
 
@@ -129,17 +130,21 @@ def _read_progress(file_prefix: str, si: int, fc_ai: str) -> str:
 
 # ── Step-2 cross-product table ────────────────────────────────────────────────
 def _draw_cross_table(cells: dict, ai_list: list, file_prefix: str,
-                      first_draw: bool, row_count: int, timeout: int = 0) -> int:
+                      first_draw: bool, row_count: int, timeout: int = 0,
+                      report_rows: list | None = None) -> int:
     """
-    Draw the N×N cross-product table.
+    Draw the report-by-checker cross-product table.
     cells[(story_idx, fc_idx)] = {"status": ..., "start_time": ..., "end_time": ...}
-    Rows = story AI (report author), Columns = fact-checker AI.
+    Rows are physical report entries; columns are configured checking agents.
     """
     N       = len(ai_list)
+    labels = ([f"S{i + 1} {report.get('make', '?')}" for i, report in enumerate(report_rows)]
+              if report_rows is not None else [get_ai_make(agent) for agent in ai_list])
+    R = len(labels)
     COL_LBL = 13   # row label visible width
     COL_CEL = 14   # each cell visible width: "● 03:42 17/47" = 13 chars
 
-    makes = [get_ai_make(a) for a in ai_list]
+    makes = list(ai_list)
 
     # Headers: plain-text ljust first, then colorize
     col_headers = "  " + " " * COL_LBL + "  " + "  ".join(
@@ -157,8 +162,7 @@ def _draw_cross_table(cells: dict, ai_list: list, file_prefix: str,
         divider,
     ]
 
-    for si, story_ai in enumerate(ai_list):
-        story_make = get_ai_make(story_ai)
+    for si, story_make in enumerate(labels):
         # Plain-text label first, then colorize
         row_label = _clr(story_make[:COL_LBL].ljust(COL_LBL), BOLD)
         cell_strs = []
@@ -208,7 +212,7 @@ def _draw_cross_table(cells: dict, ai_list: list, file_prefix: str,
     totals = []
     for fi in range(N):
         fresh_cells = [
-            cells[(si, fi)] for si in range(N)
+            cells[(si, fi)] for si in range(R)
             if (cells[(si, fi)]["status"] not in (ST_SKIP, ST_PENDING, ST_CANCELLED)
                 and cells[(si, fi)]["start_time"] and cells[(si, fi)]["end_time"]
                 and not (cells[(si, fi)]["start_time"] == 0.0
@@ -259,10 +263,11 @@ def _stories_complete(json_path: str, ai_list: list) -> bool:
             # entry sharing the make, preserving legacy "one story per
             # make" semantics for no-agent containers.
             if spec.model is not None:
-                if (need_make, spec.model) not in existing_pairs:
+                if not any(make in (agent, need_make) and model == spec.model
+                           for make, model in existing_pairs):
                     return False
             else:
-                if not any(m == need_make for (m, _) in existing_pairs):
+                if not any(m in (agent, need_make) for (m, _) in existing_pairs):
                     return False
         return True
     except (OSError, json.JSONDecodeError):
@@ -274,15 +279,14 @@ def _ensure_segments(file_json: str, n_stories: int, quiet: bool = False) -> Non
     For each of the first n_stories stories in file_json, build and store
     story["segments"] if the key is absent or empty.  Written atomically.
 
-    Called once before the N×N fact-check loop so that every st-fact
+    Called once before the report-by-agent fact-check loop so that every st-fact
     subprocess inherits the same stable segment list — making progress
     counts accurate from the first second and ensuring all checkers work
     on identical units.
     """
     try:
-        with open(file_json) as f:
-            container = json.load(f)
-    except (OSError, json.JSONDecodeError):
+        container, fingerprint = load_snapshot(file_json)
+    except (OSError, StoreError):
         return
 
     changed = False
@@ -298,11 +302,7 @@ def _ensure_segments(file_json: str, n_stories: int, quiet: bool = False) -> Non
     if not changed:
         return
 
-    tmp = file_json + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(container, f, ensure_ascii=False, indent=4)
-        f.flush(); os.fsync(f.fileno())
-    os.replace(tmp, file_json)
+    save_snapshot(file_json, container, fingerprint)
     if not quiet:
         built = sum(1 for s in container.get("story", [])[:n_stories] if s.get("segments"))
         print(f"  Segments built for {_clr(built, GREEN, BOLD)} stories.")
@@ -392,9 +392,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         prog='st-cross',
         description=(
-            "Cross-product story generation and fact-checking.\n"
-            "Generates N stories (one per AI) then fact-checks each story\n"
-            "with every AI, producing an N×N result matrix."
+            "Cross-product report generation and fact-checking.\n"
+            "Generates reports when needed, then checks every saved report\n"
+            "with every configured checking agent (reports × agents)."
         ),
     )
     parser.add_argument("json_file", type=str, metavar="file.json",
@@ -431,7 +431,7 @@ def main() -> None:
                         help="Preview the Step 2 matrix without running anything. "
                              "Shows pending vs already-complete cells, a per-row and "
                              "per-column summary, and exits. Useful before committing "
-                             "30+ minutes to a full N×N run. Implies --skip-gen.")
+                             "30+ minutes to a full matrix run. Implies --skip-gen.")
 
     # ── PAR-1: parallelism + per-provider rate limiting ──────────────────────
     parallel_group = parser.add_mutually_exclusive_group()
@@ -651,13 +651,15 @@ def main() -> None:
         # ── Merge bang files into main container ──────────────────────────────
         if not args.quiet:
             print("  Merging results...")
+        from _report_store import ensure_data_id, same_generation
         main_container: dict = {"data": [], "story": []}
+        file_fingerprint = None
         if os.path.isfile(file_json):
             try:
-                with open(file_json) as f:
-                    main_container = json.load(f)
-            except (OSError, json.JSONDecodeError):
-                pass
+                main_container, file_fingerprint = load_snapshot(file_json)
+            except (OSError, ValueError) as exc:
+                print(f"Error loading container: {exc}", file=sys.stderr)
+                sys.exit(1)
 
         merged = 0
         already_present = 0
@@ -671,16 +673,16 @@ def main() -> None:
                     # Don't replace a non-cached entry with a cached one —
                     # the non-cached entry has the real generation timing.
                     is_cached = entry.get("timing", {}).get("cached", False)
-                    non_cached_makes = {
-                        e.get("make") for e in main_container["data"]
-                        if not e.get("timing", {}).get("cached", False)
-                    }
-                    if is_cached and entry.get("make") in non_cached_makes:
+                    equivalent_real_timing = any(
+                        not e.get("timing", {}).get("cached", False) and same_generation(e, entry)
+                        for e in main_container["data"])
+                    if is_cached and equivalent_real_timing:
                         already_present += 1
                         continue
                     # Deduplicate by md5_hash
                     if not any(e.get("md5_hash") == entry.get("md5_hash")
                                for e in main_container["data"]):
+                        ensure_data_id(entry)
                         main_container["data"].append(entry)
                         merged += 1
                     else:
@@ -689,11 +691,7 @@ def main() -> None:
             except (OSError, json.JSONDecodeError):
                 pass
 
-        tmp_json = file_json + ".tmp"
-        with open(tmp_json, 'w', encoding='utf-8') as f:
-            json.dump(main_container, f, ensure_ascii=False, indent=4)
-            f.flush(); os.fsync(f.fileno())
-        os.replace(tmp_json, file_json)
+        save_snapshot(file_json, main_container, file_fingerprint)
         if not args.quiet:
             if already_present and not merged:
                 print(f"  Merged {merged} new result(s), {already_present} already present → {file_json}")
@@ -731,15 +729,27 @@ def main() -> None:
     # giving accurate n/total progress from the first second and guaranteeing
     # all N checkers for each story work on identical units.
     # ══════════════════════════════════════════════════════════════════════════
-    _ensure_segments(file_json, N, quiet=args.quiet)
+    try:
+        with open(file_json, encoding="utf-8") as stream:
+            report_rows = json.load(stream).get("story", [])
+        R = len(report_rows)
+        if not R or not N:
+            print("No reports or checking agents are available for the cross-product.", file=sys.stderr)
+            sys.exit(1)
+        report_labels = [f"S{i + 1} {report.get('make', '?')}" for i, report in enumerate(report_rows)]
+        if not args.dry_run:
+            _ensure_segments(file_json, R, quiet=args.quiet)
+    except (OSError, StoreError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
 
     # ══════════════════════════════════════════════════════════════════════════
     # STEP 2 — Fact-check cross-product
     # ══════════════════════════════════════════════════════════════════════════
-    # cells[(story_idx, fc_idx)] holds status for each cell in the N×N matrix
+    # Each cell identifies a physical report row and a checking-agent column.
     cells = {
         (si, fi): {"status": ST_PENDING, "start_time": None, "end_time": None}
-        for si in range(N) for fi in range(N)
+        for si in range(R) for fi in range(N)
     }
 
     # ── Pre-scan: mark cells already present in the JSON as done ─────────────
@@ -752,21 +762,18 @@ def main() -> None:
     n_force_cleared = 0
     if args.force:
         try:
-            with open(file_json) as f:
-                container = json.load(f)
-            for story in container.get("story", [])[:N]:
+            container, fingerprint = load_snapshot(file_json)
+            for story in container.get("story", []):
                 facts = story.get("fact") or []
                 if facts:
                     n_force_cleared += len(facts)
                     story["fact"] = []
-            tmp = file_json + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(container, f, ensure_ascii=False, indent=4)
-                f.flush(); os.fsync(f.fileno())
-            os.replace(tmp, file_json)
-        except (OSError, json.JSONDecodeError):
-            pass
-        if not args.quiet and n_force_cleared:
+            if not args.dry_run:
+                save_snapshot(file_json, container, fingerprint)
+        except (OSError, StoreError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            sys.exit(1)
+        if not args.quiet and n_force_cleared and not args.dry_run:
             print(f"  {_clr('--force', BOLD)}: cleared {_clr(n_force_cleared, YELLOW, BOLD)} "
                   f"existing fact-check entr{'y' if n_force_cleared == 1 else 'ies'} "
                   f"before re-running.")
@@ -774,7 +781,7 @@ def main() -> None:
         try:
             with open(file_json) as f:
                 existing = json.load(f)
-            for si, story in enumerate(existing.get("story", [])[:N]):
+            for si, story in enumerate(existing.get("story", [])):
                 for fact in story.get("fact", []):
                     fc_make  = fact.get("make", "")
                     fc_model = fact.get("model", "")
@@ -785,7 +792,7 @@ def main() -> None:
                     for fi, ai_key in enumerate(ai_list):
                         col_make  = get_ai_make(ai_key)
                         col_model = get_ai_model(ai_key)
-                        same_make  = (col_make == fc_make)
+                        same_make  = (ai_key == fc_make) or (fc_make not in ai_list and col_make == fc_make)
                         same_model = (col_model == fc_model) or not col_model or not fc_model
                         if same_make and same_model:
                             if cells[(si, fi)]["status"] == ST_PENDING:
@@ -801,18 +808,18 @@ def main() -> None:
         print(f"  Resuming: {_clr(n_preloaded, GREEN, BOLD)} cell(s) already complete in {file_json}")
 
     # ── --dry-run: preview and exit ──────────────────────────────────────────
-    # Print the planned Step 2 matrix (one row per story-AI, one column per
+    # Print the planned Step 2 matrix (one row per saved report, one column per
     # fact-checker AI), then exit without launching any cells. Cells that
     # the pre-scan marked ST_DONE show as ✓; cells still to run show as ·.
     if args.dry_run:
         _draw_cross_table(cells, ai_list, file_prefix,
-                          first_draw=True, row_count=0, timeout=args.timeout)
-        total_cells  = N * N
+                          first_draw=True, row_count=0, timeout=args.timeout, report_rows=report_rows)
+        total_cells  = R * N
         pending      = total_cells - n_preloaded
-        # Per-row (story AI) and per-column (fact-checker AI) pending counts.
+        # Per-report and per-checker pending counts.
         row_pending = [sum(1 for fi in range(N) if cells[(si, fi)]["status"] == ST_PENDING)
-                       for si in range(N)]
-        col_pending = [sum(1 for si in range(N) if cells[(si, fi)]["status"] == ST_PENDING)
+                       for si in range(R)]
+        col_pending = [sum(1 for si in range(R) if cells[(si, fi)]["status"] == ST_PENDING)
                        for fi in range(N)]
         print()
         print(f"  {_clr('Dry run', BOLD, CYAN)} — {total_cells} cells total: "
@@ -820,13 +827,13 @@ def main() -> None:
               f"{_clr(n_preloaded, GREEN, BOLD)} already complete.")
         if pending:
             row_detail = "  ".join(
-                f"{get_ai_make(ai_list[si])[:10]}={row_pending[si]}" for si in range(N)
+                f"{report_labels[si]}={row_pending[si]}" for si in range(R)
                 if row_pending[si])
             col_detail = "  ".join(
-                f"{get_ai_make(ai_list[fi])[:10]}={col_pending[fi]}" for fi in range(N)
+                f"{ai_list[fi]}={col_pending[fi]}" for fi in range(N)
                 if col_pending[fi])
             if row_detail:
-                print(f"  Pending by story AI:        {row_detail}")
+                print(f"  Pending by report:        {row_detail}")
             if col_detail:
                 print(f"  Pending by fact-checker AI: {col_detail}")
         else:
@@ -840,10 +847,10 @@ def main() -> None:
     # done … wall time 00:00" — which looks confusingly like work just
     # happened.  Better: tell the user what's already in the file, when it
     # was last updated, and what to do next.
-    if n_preloaded == N * N:
+    if n_preloaded == R * N:
         # Find the most recent fact-check completion timestamp across all cells.
         latest_ts = 0.0
-        for story in existing.get("story", [])[:N]:
+        for story in existing.get("story", []):
             for fact in story.get("fact", []):
                 ts = (fact.get("timing") or {}).get("end_time", 0) or 0
                 if ts > latest_ts:
@@ -870,7 +877,7 @@ def main() -> None:
         else:
             ts_line = _clr("(no timestamp recorded)", DIM)
 
-        story_ai_str = ", ".join(get_ai_make(a) for a in ai_list)
+        story_ai_str = ", ".join(report_labels)
 
         if not args.quiet:
             # Pad labels to the longest one so values line up in a clean column.
@@ -878,8 +885,8 @@ def main() -> None:
             # otherwise count the escape bytes against the column width.
             rows = [
                 ("Container:",    file_json),
-                ("Matrix:",       f"{N}×{N}  ({N * N} cells)"),
-                ("Story AIs:",    story_ai_str),
+                ("Matrix:",       f"{R}×{N}  ({R * N} cells)"),
+                ("Reports:",      story_ai_str),
                 ("Last updated:", ts_line),
             ]
             label_w = max(len(lbl) for lbl, _ in rows)
@@ -901,7 +908,7 @@ def main() -> None:
         with _table_lock:
             cross_row_count[0] = _draw_cross_table(
                 cells, ai_list, file_prefix, first_draw=first,
-                row_count=cross_row_count[0], timeout=args.timeout)
+                row_count=cross_row_count[0], timeout=args.timeout, report_rows=report_rows)
 
     # Step 2 live table is suppressed under --quiet (global) AND under
     # --verbose (per-cell prints would interleave with ANSI redraws). See
@@ -918,7 +925,7 @@ def main() -> None:
         timeout_str = f"  (timeout {_fmt(args.timeout)}/cell)" if args.timeout > 0 else ""
         print(f"\n  {_clr('Step 2 — Cross-product fact-checking', BOLD)}{_clr(timeout_str, DIM)}")
         print(f"  {_clr('─' * 77, DIM)}")
-        print(f"  {N}×{N} matrix — {N * N} cells, verbose mode (no live table)\n")
+        print(f"  {R}×{N} matrix — {R * N} cells, verbose mode (no live table)\n")
 
     # ── Launch Step 2 cells ───────────────────────────────────────────────────
     # All NN cells run fully in parallel. st-fact uses fcntl.flock internally
@@ -931,7 +938,7 @@ def main() -> None:
     # nothing prints — looks indistinguishable from a stalled process.
     _verbose_progress = args.verbose and not args.quiet
     _total_to_run = sum(
-        1 for si in range(N) for fi in range(N)
+        1 for si in range(R) for fi in range(N)
         if cells[(si, fi)]["status"] != ST_DONE
     )
     _completed_count = [0]                # mutable container — closure rebind
@@ -1025,7 +1032,7 @@ def main() -> None:
                 print(
                     f"  {_idx_prefix(n_done_so_far)} "
                     f"{_clr(mark, color)} "
-                    f"{ai_list[si]} → {fc_agent}  "
+                    f"{report_labels[si]} → {fc_agent}  "
                     f"{_clr(f'({_fmt(elapsed)})', DIM)}",
                     flush=True,
                 )
@@ -1035,7 +1042,7 @@ def main() -> None:
     # so concurrent calls on the same file are safe.
     threads_with_idx = [
         (si, fi, threading.Thread(target=_run_cell, args=(si, fi), daemon=True))
-        for si in range(N) for fi in range(N)
+        for si in range(R) for fi in range(N)
         if cells[(si, fi)]["status"] != ST_DONE   # skip already-done cells
     ]
     threads = [t for _, _, t in threads_with_idx]
@@ -1048,7 +1055,7 @@ def main() -> None:
             print(
                 f"  {_idx_prefix(n)} "
                 f"{_clr('▸', DIM)} "
-                f"{_clr('Starting', DIM)}: {ai_list[si]} → {ai_list[fi]}…",
+                f"{_clr('Starting', DIM)}: {report_labels[si]} → {ai_list[fi]}…",
                 flush=True,
             )
         t.start()
@@ -1087,7 +1094,7 @@ def main() -> None:
                 break
             if cancelled.is_set():
                 # Mark all still-pending/running cells as cancelled
-                for si in range(N):
+                for si in range(R):
                     for fi in range(N):
                         if cells[(si, fi)]["status"] in (ST_PENDING, ST_RUNNING):
                             cells[(si, fi)]["status"] = ST_CANCELLED
@@ -1096,7 +1103,7 @@ def main() -> None:
 
     except KeyboardInterrupt:
         cancelled.set()
-        for si in range(N):
+        for si in range(R):
             for fi in range(N):
                 if cells[(si, fi)]["status"] in (ST_PENDING, ST_RUNNING):
                     cells[(si, fi)]["status"] = ST_CANCELLED
@@ -1137,7 +1144,7 @@ def main() -> None:
     if cell_errors:
         print(_clr("  Failed cells:", RED, BOLD))
         for (si, fi), err in sorted(cell_errors.items()):
-            story_make = get_ai_make(ai_list[si])
+            story_make = report_labels[si]
             fc_make    = get_ai_make(ai_list[fi])
             first_line = err.splitlines()[0] if err else "unknown error"
             print(f"    story={story_make} fc={fc_make}: {first_line}")

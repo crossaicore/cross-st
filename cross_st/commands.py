@@ -50,6 +50,7 @@ def st_rm():        _run("st-rm")
 def st_speak():     _run("st-speak")
 def st_speed():     _run("st-speed")
 def st_stones():    _run("st-stones")
+def st_update():    _run("st-update")
 def st_verdict():   _run("st-verdict")
 def st_voice():     _run("st-voice")
 

@@ -8,6 +8,57 @@
 
 ## Section 1 — Frequently asked questions
 
+### How do I update an existing report?
+
+Run `st-update -s 1 report.json` and describe the changes in your editor.
+Cross uses the saved Markdown, including your manual edits, and appends a
+new report. It prints the assigned index and a summary after saving.
+`-s N` is required when multiple reports exist; inspect them with
+`st-ls report.json`. With one report, you can omit `-s`.
+
+Use `--prompt changes.prompt` to read instructions from a file and
+`--evidence notes.md` for supplied local evidence. Evidence can be repeated.
+Updates do not browse, fact-check, or publish automatically.
+
+**See also:**
+- https://github.com/crossaicore/cross-st/wiki/st-update
+- https://github.com/crossaicore/cross-st/wiki/st-update-examples
+
+### How do I regenerate an update without adding another report?
+
+Use `st-update -s 1 --iterate 2 report.json`: source 1 supplies the report,
+and existing output 2 supplies the saved update request to refine.
+Cross replaces output 2 and its associated raw generation only after the
+new pair is ready. Omit `--iterate` to keep the old output and append instead.
+
+To include manual edits made to output 2, use `-s 2 --iterate 2`.
+On the first update, a valid `--iterate` is ignored with a message and an
+output is appended. Supplied indices must always exist. Once updates have
+existed, the target needs an associated update request; removing outputs
+does not reset that rule. Removal shifts later indices, so run `st-ls` again.
+
+**See also:**
+- https://github.com/crossaicore/cross-st/wiki/st-update
+
+### How do I review what st-update changed?
+
+Review happens after generation and saving. `--update-summary` is the
+concise default; `--update-details` adds the exact Markdown diff and AI
+explanations. Line counts and the diff come from the actual content.
+AI reasons, source attributions, and uncertainties are not independently
+verified. Read the whole report with
+`st-edit --view-only --markdown -s 2 report.json`.
+
+Run `st-update -s 2 --show-summary --update-details report.json` to read the
+saved summary without an AI call. If the report has been edited since
+generation, Cross says the summary describes the generated output.
+You can edit, iterate, append, or remove the result with explicit indices.
+There is no separate plan-approval command or shared active-report setting.
+
+**See also:**
+- https://github.com/crossaicore/cross-st/wiki/st-update
+- https://github.com/crossaicore/cross-st/wiki/st-update-examples
+
 ### What is cross-st?
 
 cross-st generates AI fact-checked **research reports**. You give it a
@@ -446,16 +497,18 @@ Understanding the container lets you inspect, pipe, and post exactly the content
 ```
 subject.json
 ├── data[]            ← one entry per AI generation run
-│   ├── make          "openai"
+│   ├── make          configured agent name (legacy: provider)
 │   ├── model         "gpt-4o"
-│   ├── prompt        the full prompt text sent to the AI
-│   ├── gen_payload   raw request body (model, max_tokens, messages…)
+│   ├── prompt        user-authored generation/update instructions
+│   ├── data_id       opaque association ID
+│   ├── gen_payload   actual API request body (including assembled instructions)
 │   ├── gen_response  raw API response
 │   ├── timing        wall-clock and token metrics
 │   └── md5_hash      fingerprint of prompt + model (dedup key)
 │
 └── story[]           ← one entry per prepared report
-    ├── make          "openai"
+    ├── make          configured agent name (legacy: provider)
+    ├── source_data_id associated raw generation ID
     ├── model         "gpt-4o"
     ├── title         short headline (≤ 10 words)
     ├── markdown      full report body in Markdown
@@ -493,13 +546,14 @@ The resulting 5 × 5 truth matrix — every AI checking every other AI's report 
 
 ## `data[]` — raw generation entries
 
-Created by `st-gen` / `st-bang`. One entry per AI that generated a report.
+Created by generation and update commands. Multiple entries can belong to the same agent or provider/model.
 
 | Key | Type | Description |
 |-----|------|-------------|
-| `make` | string | AI provider name — `"openai"`, `"anthropic"`, `"xai"`, `"gemini"`, `"perplexity"` |
+| `make` | string | Configured agent name in current generators; legacy entries can contain a provider name |
+| `data_id` | string | Opaque ID linking this raw entry to prepared reports |
 | `model` | string | Exact model string used, e.g. `"gpt-4o"`, `"claude-sonnet-4-5"` |
-| `prompt` | string | The full prompt text that was sent to the AI |
+| `prompt` | string | User-authored generation instructions or update request; the assembled API request is retained in `gen_payload` |
 | `gen_payload` | object | Complete API request body (`model`, `max_tokens`, `system`, `messages`) |
 | `gen_response` | object | Raw API response object as returned by the provider |
 | `timing` | object | Performance metrics (see below) |
@@ -522,11 +576,12 @@ Created by `st-gen` / `st-bang`. One entry per AI that generated a report.
 
 ## `story[]` — prepared report entries
 
-Created by `st-prep` (called automatically by `st-gen`). One entry per AI. Contains the human-readable versions of the report extracted from the raw generation.
+Created by `st-prep` (called automatically by `st-gen`) and commands that prepare new outputs. Each entry contains the human-readable versions of one report. Several reports can have the same provider/model.
 
 | Key | Type | Description |
 |-----|------|-------------|
-| `make` | string | AI provider that wrote this report |
+| `make` | string | Authoring agent name; legacy entries can contain a provider name |
+| `source_data_id` | string | ID of the associated raw generation entry |
 | `model` | string | Exact model string |
 | `title` | string | Short headline, ≤ 10 words — used as the Discourse topic title |
 | `markdown` | string | Full report body in Markdown — posted by `st-post`, edited by `st-edit` |
@@ -610,8 +665,32 @@ A container immediately after `st-gen` (one AI, no fact-checks yet):
 | 1b | `st-bang subject.prompt` | `data[0..4]` + `story[0..4]` (all 5 AIs in parallel) |
 | 2 | `st-cross subject.json` | `story[n].fact[]` — 25 entries for a 5-provider run |
 | 3 | `st-post subject.json` | `story[n].topic_id`, `.post_url`, `.mp3_url` |
-| 4 | `st-fix subject.json` | Overwrites `story[n].markdown`, `.text`, `.spoken`, `.title` |
+| 4 | `st-fix subject.json` | Appends a generated fix and its prepared report |
 | 4b | `st-merge subject.json` | Appends a new `story[]` entry (merged from multiple AI reports) |
+| 5 | `st-update -s 1 subject.json` | Appends an associated raw entry and updated report |
+| 5b | `st-update -s 1 --iterate 2 subject.json` | Replaces existing update output 2 and its associated raw entry together |
+| 6 | `st-rm -s 2 subject.json` | Removes report 2 and its associated raw entry; later indices shift down |
+
+## Report associations and updates
+
+New raw entries have an opaque `data_id`; prepared reports refer to it through `source_data_id`. This links a report to the generation that produced it. Do not infer associations from matching array positions or matching provider/model names. Older ambiguous associations are rejected by operations that require an exact pair.
+
+`st-update` adds these ordinary metadata fields:
+
+| Location | Field | Meaning |
+|---|---|---|
+| Raw entry | `prompt`, `update_request` | User-authored update instructions |
+| Raw entry and report | `base_prompt` | Original authored intent carried into the update |
+| Raw entry | `markdown` | Generated report body extracted from the structured AI response |
+| Raw entry | `update_summary` | Actual Markdown diff and line counts, AI explanations, uncertainties, and output SHA-256 |
+| Prepared report | `authored_prompt` | Update instructions used for this output and its scoring |
+| Container | `_st_update` | Records that an update has existed, including after outputs are removed |
+
+The raw `gen_payload` and `gen_response` still record the actual API exchange. Update requests and the original intent are stored separately from the assembled API prompt. AI reasons and source attributions in `update_summary` are unverified explanations; the local Markdown diff records what actually changed.
+
+An append preserves all existing entries. Iteration prepares the full replacement pair before an atomic save; it discards the previous target only on success. Updated content does not inherit fact-checks or publication state. There is no active-report pointer, version graph, or ancestry footer. CLI indices remain current one-based array positions. Charts and rankings distinguish separate reports, including original and updated outputs from the same provider/model, using labels such as `provider:model [S6]` where needed.
+
+See [st-update](st-update) for selection, review, and iteration examples.
 
 ---
 
@@ -619,7 +698,7 @@ A container immediately after `st-gen` (one AI, no fact-checks yet):
 
 ```bash
 st-cat subject.json                  # print the prompt (default)
-st-cat --prompt subject.json         # print the prompt (explicit)
+st-cat --prompt -s 2 subject.json    # print report 2's authored prompt/request
 st-cat -t subject.json               # print the title of story 1
 st-cat --markdown subject.json       # print the Markdown body
 st-cat --text subject.json           # print the plain-text body
@@ -629,6 +708,11 @@ st-cat --markdown -s 3 subject.json  # print story 3's Markdown
 ```
 
 **Related:** [st-gen](st-gen) · [st-bang](st-bang) · [st-prep](st-prep) · [st-cross](st-cross) · [st-fact](st-fact) · [st-cat](st-cat) · [st-post](st-post) · [st-analyze](st-analyze)
+
+
+### Publication receipts
+
+Optional top-level `_publications[]` retains known remote titles, site URLs, topic IDs, and post URLs independently of the local report. It supports duplicate-title checks after a local report is edited, replaced, or removed. It does not contain report versions and does not synchronize remote content. Report-level post fields describe the currently attached publication only. If a remote post succeeds but the container cannot be saved, a `.cross-receipts/*.receipt` recovery file preserves the returned publication details.
 
 ### Home
 
@@ -662,6 +746,7 @@ New user? Start here: **[Onboarding](Onboarding)** — set up your API keys and 
 | [st-fact](st-fact) | Fact-check one story with one AI |
 | [st-fetch](st-fetch) | Import external content (URL, tweet, clipboard, file) |
 | [st-find](st-find) | Search across story containers and prompt files |
+| [st-update](st-update) | Update a saved report and review the generated changes |
 | [st-fix](st-fix) | Improve a story using fact-check feedback |
 | [st-gen](st-gen) | Generate a single AI report |
 | [st-heatmap](st-heatmap) | Cross-product fact-check score heatmap |
@@ -3317,7 +3402,7 @@ Launches one `st-gen --bang N` subprocess per AI. Each writes to `tmp/<story>_N.
 
 # st-cat — Print story container fields to stdout
 
-Prints fields from a story container to stdout. Useful for piping into other tools or shell scripts. Defaults to printing the prompt if no field flag is given.
+Prints fields from a story container to stdout. Useful for piping into other tools or shell scripts. Defaults to printing the selected report’s authored prompt if no field flag is given. For an update output, this is its update request. Select the report with `-s N` (default: 1).
 
 ## Examples
 
@@ -3327,7 +3412,7 @@ st-cat -t subject.json              # print title of story 1
 st-cat --markdown -s 3 subject.json # print markdown of story 3
 st-cat -f 2 -s 1 subject.json       # print fact-check report 2 from story 1
 st-cat --text -s 2 subject.json     # print plain text body of story 2
-st-cat --prompt subject.json        # print the original prompt text
+st-cat --prompt -s 2 subject.json   # print report 2's authored prompt or update request
 ```
 
 ## Options
@@ -3341,7 +3426,7 @@ st-cat --prompt subject.json        # print the original prompt text
 | `--markdown` | Print the story markdown |
 | `--hashtags` | Print the story hashtags |
 | `--spoken` | Print the story spoken-text variant |
-| `--prompt` | Print the original prompt text (read from `data[0].prompt` in the container) (**default** if no other field specified) |
+| `--prompt` | Print the selected report’s authored prompt or update request through its raw association; older reports can use a common authored prompt shared by all raw entries. If no unambiguous prompt is available, prints “No prompt found in container.” (**default** if no other field specified) |
 | `-v`, `--verbose` | Verbose output |
 | `-q`, `--quiet` | Minimal output |
 
@@ -3357,9 +3442,9 @@ other tools or shell scripts.
 
 ### st-cross
 
-# st-cross — Run all AI providers and cross-check results
+# st-cross — Generate reports and cross-check every saved report
 
-Runs the full research pipeline in one command: generates a report from every AI provider, then has every AI fact-check every report. The result is an N×N score matrix saved into the container.
+Runs the full research pipeline in one command: generates reports when needed, then has every configured checking agent fact-check every saved report. The result is a reports × agents matrix saved into the container. An initial run with five agents produces a 5×5 matrix; adding an updated report makes it 6×5.
 
 ![st-cross pipeline — tool associations](st-cross-pipeline.svg)
 
@@ -3370,14 +3455,14 @@ Runs the full research pipeline in one command: generates a report from every AI
 
 **Related:** [st-bang](st-bang)  [st-fact](st-fact)  [st-heatmap](st-heatmap)  [st-verdict](st-verdict)  [Multi-Model](Multi-Model)  [Ollama](Ollama)
 
-> **Multi-model (0.9.0+):** `--agent` accepts agents defined in `~/.cross_ai_models.json` — e.g. `--agent anthropic-opus` runs Opus alongside the bare `--agent anthropic` default. Same-make agents share one rate-limit semaphore. See [Multi-Model](Multi-Model).
+> **Multiple models:** Checking columns come from configured [agents](Agents), including multiple models from one provider. `st-cross` uses all available checking agents; use `st-fact --agent NAME` to choose one checker. Same-provider agents share one rate-limit semaphore. See [Multi-Model](Multi-Model).
 
 ---
 
 ## Examples
 
 ```bash
-st-cross subject.json                   # full N×N run: generate + fact-check all AIs
+st-cross subject.json                   # generate when needed + check every saved report
 st-cross --no-cache subject.json        # bypass cache (no read, no write); does NOT force a re-run on a complete container
 st-cross --force subject.json           # clear all existing fact[] entries and re-run every cell — use after a prompt change
 st-cross --skip-gen subject.json        # skip generation — only run fact-checking
@@ -3396,7 +3481,7 @@ st-cross -q subject.json                # minimal output (suppress live table)
 | `--cache` | Enable API cache (default: enabled) |
 | `--no-cache` | Disable API cache (no read, no write). Does **not** by itself force a re-fact-check on an already-complete container — see `--force`. |
 | `--force` | Bypass resume detection AND clear all existing `fact[]` entries before launching, then re-run every cell. Implies `--no-cache`. Use after changing the fact-check prompt or when you want fresh verdicts. |
-| `--skip-gen` | Skip Step 1 (story generation). Auto-detected if all stories already exist. |
+| `--skip-gen` | Skip report generation. Auto-detected when a report already exists for each generation agent. |
 | `--dry-run` | Preview the Step 2 matrix (pending vs complete cells) and exit without running anything. Implies `--skip-gen`. |
 | `--timeout SECONDS` | Per-cell wall-clock timeout (default: 1800 = 30 min). `0` = no timeout. |
 | `-p`, `--parallel` | Run cells in parallel, gated by per-provider rate-limit semaphores (default). |
@@ -3405,6 +3490,14 @@ st-cross -q subject.json                # minimal output (suppress live table)
 | `--retry-budget SECONDS` | Per-segment retry budget passed to `st-fact` (default: 45). `0` = unlimited. |
 | `-v`, `--verbose` | Verbose output |
 | `-q`, `--quiet` | Suppress live table (minimal output) |
+
+## Existing containers and update outputs
+
+Each saved report is a separate matrix row, identified by its current report index. Reports from the same agent or model remain separate. Columns are the configured checking agents; the number of rows need not equal the number of columns.
+
+For example, after five initial reports have all been checked, `st-update -s 2 subject.json` appends report 6 with no inherited checks. The next `st-cross subject.json` resumes the existing 25 completed cells and checks report 6 with all five agents. It does not select a single newest or active report. `--skip-gen` explicitly suppresses generation when you only want checks on the reports already saved.
+
+`--dry-run` previews this full matrix without changing an existing container, including when combined with `--force`. A real `--force` clears checks on every report and reruns every cell. For one report and one chosen checker, use `st-fact -s 6 --agent NAME subject.json` instead.
 
 ## `--timeout` vs `--retry-budget`
 
@@ -3419,7 +3512,7 @@ The two flags operate at **different scopes** and are independent — you almost
 
 ## For developers
 
-Step 1 runs `st-gen --bang` per AI in parallel processes, each writing to its own `_N.json` file so there are no shared-file races. After all jobs finish, st-cross merges them into the main container and runs `st-prep` sequentially to build the `story[]` array. Step 2 launches one daemon thread per cell (N×N total), each calling `st-fact` as a subprocess for crash isolation. A per-provider `threading.Semaphore` (sized by `cross_ai_core.get_rate_limit_concurrency()`) gates how many cells for a given fact-checker AI can be in flight at once — this is what prevents parallel runs from tripping provider rate limits. `--sequential` collapses every provider onto a single `Semaphore(1)`. The live ANSI display is updated every second; Ctrl+C cancels remaining cells while preserving the results collected so far.
+Step 1 runs `st-gen --bang` per agent in parallel processes, each writing to its own `_N.json` file so there are no shared-file races. After all jobs finish, st-cross merges them into the main container and runs `st-prep` sequentially to build the `story[]` array. Step 2 launches one daemon thread per pending report/checker cell, each calling `st-fact` with the physical report index as a subprocess for crash isolation. A per-provider `threading.Semaphore` (sized by `cross_ai_core.get_rate_limit_concurrency()`) gates how many cells for a given checker can be in flight at once. `--sequential` collapses every provider onto a single `Semaphore(1)`. The live ANSI display is updated every second; Ctrl+C cancels remaining cells while preserving the results collected so far.
 
 ### st-domain
 
@@ -3560,9 +3653,9 @@ The difficulty calibration line and the format instruction are intentionally fix
 
 ### st-edit
 
-# st-edit — Edit or view story fields in a container
+# st-edit — Edit or view report fields in a container
 
-Opens any field in a story container — story text, title, spoken version, or a fact-check — in your configured editor. Changes are saved back to the `.json` file.
+Opens any field in a report container — report text, title, spoken version, or a fact-check — in your configured editor. Changes are saved to the selected report in the `.json` file; manual editing does not append an output. Markdown/text edits rebuild derived fields and clear stale checks/segments. Title changes also clear checks. Publication and export pointers are cleared when their content changes; existing remote posts and exported files remain independent. Concurrent changes abort the save rather than overwrite newer work.
 
 **Run after:** `st-prep`
 
@@ -3571,15 +3664,15 @@ Opens any field in a story container — story text, title, spoken version, or a
 ## Examples
 
 ```bash
-st-edit subject.json                    # edit story 1 markdown in $EDITOR
-st-edit -s 2 subject.json              # edit story 2
-st-edit --markdown subject.json        # edit the markdown field of story 1
+st-edit subject.json                    # edit report 1 markdown in $EDITOR
+st-edit -s 2 subject.json              # edit report 2
+st-edit --markdown subject.json        # edit the markdown field of report 1
 st-edit --title subject.json           # edit the title field
 st-edit --text subject.json            # edit the plain-text field
 st-edit --spoken subject.json          # edit the spoken-audio source text
 st-edit -f 1 subject.json             # edit fact-check report 1
-st-edit --view subject.json            # view story with Glow, then open editor
-st-edit --view-only subject.json       # view story with Glow (read-only)
+st-edit --view subject.json            # view report in the browser with Grip, then open editor
+st-edit --view-only subject.json       # view report in the browser with Grip (read-only)
 ```
 
 ## Options
@@ -3587,18 +3680,18 @@ st-edit --view-only subject.json       # view story with Glow (read-only)
 | Option | Description |
 |--------|-------------|
 | `file.json` | Path to the JSON container |
-| `-s N`, `--story N` | Story to edit (1-based index, default: 1) |
+| `-s N`, `--story N` | Report to edit (1-based index, default: 1) |
 | `-f N`, `--fact N` | Fact-check report to edit (1-based index) |
 | `-md`, `--markdown` | Edit the Markdown field |
 | `-title`, `--title` | Edit the title field |
 | `-text`, `--text` | Edit the plain-text field |
 | `-spoken`, `--spoken` | Edit the text-to-speech source text |
-| `--view` | View with Glow first, then open editor |
-| `--view-only` | View with Glow only — no editing |
+| `--view` | View with Grip in the browser first, then open editor |
+| `--view-only` | View with Grip in the browser only — no editing |
 | `-q`, `--quiet` | Minimal output |
 | `-v`, `--verbose` | Verbose output |
 
-**Related:** [st-prep](st-prep)  [st-fix](st-fix)  [st-admin](st-admin)
+**Related:** [st-update](st-update)  [st-prep](st-prep)  [st-fix](st-fix)  [st-admin](st-admin)
 
 ---
 
@@ -4520,7 +4613,7 @@ st-post --check                                           # verify credentials w
 | `-s N`, `--story N` | Story to publish (1-based index, default: 1) |
 | `-f N`, `--fact N` | Reply to the post with fact-check N |
 | `--category VALUE` | Where to post — accepts `private`, a numeric category ID, or (on crossai.dev only) `test` / `reports` / `prompt-lab`. Default: `test`. See below. |
-| `--prompt` | Post the prompt text from the container instead of the story (use with `--category prompt-lab`) |
+| `--prompt` | Post the selected report’s authored prompt instead of its body (use with `--category prompt-lab`) |
 | `--check` | Validate Discourse credentials and connection without posting |
 | `-v`, `--verbose` | Verbose output |
 | `-q`, `--quiet` | Minimal output |
@@ -4566,6 +4659,12 @@ Once you know the ID, you can either:
 ## For developers
 
 Site credentials are read from the `DISCOURSE` JSON in `~/.crossenv`. If an `.mp3` file is provided, it is uploaded first and the Discourse audio-player embed syntax is prepended to the post. `--category` resolution is centralised in `discourse.resolve_category(site, name_or_id)`: numeric IDs pass through, `private` resolves to `site["private_category_id"]`, and the crossai.dev shortcuts (`test`/`reports`/`prompt-lab` → 6/16/17) are gated on `crossai.dev` appearing in `site["url"]`. The shortcut table lives in `cross_st/discourse.py` as `CROSSAI_NAMED_CATEGORIES`.
+
+## Posting updated reports
+
+Use the output index explicitly, for example `st-post -s 2 report.json`. Ordinary JSON posting reads that report’s saved Markdown and title. Explicit `.md`/`.title` arguments remain deliberate overrides. Supply the exact existing MP3 filename when attaching audio; an update does not regenerate exports automatically.
+
+Posting creates a separate remote copy. Local edits, iteration, or deletion do not update that copy. Known duplicate titles on the same site are rejected; choose a distinct title to publish a new output. Local publication receipts retain the known remote title/URL even if a report is subsequently changed or removed. A successful remote post is recorded without overwriting concurrent local report edits.
 
 ### st-prep
 
@@ -4682,18 +4781,20 @@ Grade-level metrics share a scale: 6–8 middle school, 9–12 high school,
 
 ### st-rm
 
-# st-rm — Remove items from a story container
+# st-rm — Remove reports and associated raw data
 
-Removes a story or a fact-check entry from a `.json` container. Use `-s` to specify the story and `-f` to specify the fact-check.
+Removes a report and its associated raw-data entry from a `.json` container. Use `-s` to select the report and `-f` to remove only a fact-check. Removing a report compacts the arrays; use `st-ls` again before reusing an index. Local deletion does not remove a published post.
+
+Raw/report associations are resolved from saved links or provable legacy content. Ambiguous legacy pairs are rejected without changing the container. `-d N` can remove an unowned raw entry; use `-s N` for a complete pair.
 
 ## Examples
 
 ```bash
-st-rm -s 3 subject.json              # remove story 3
+st-rm -s 3 subject.json              # remove report 3
 st-rm -d 2 subject.json              # remove data item 2
-st-rm -s 2 -f 1 subject.json         # remove fact-check 1 from story 2
-st-rm -F -s 2 subject.json           # clear all fact-checks from story 2
-st-rm -F --all-stories subject.json  # clear all fact-checks from every story
+st-rm -s 2 -f 1 subject.json         # remove fact-check 1 from report 2
+st-rm -F -s 2 subject.json           # clear all fact-checks from report 2
+st-rm -F --all-stories subject.json  # clear all fact-checks from every report
 ```
 
 ## Options
@@ -4702,10 +4803,10 @@ st-rm -F --all-stories subject.json  # clear all fact-checks from every story
 |--------|-------------|
 | `file.json` | Path to the JSON container |
 | `-d N`, `--data N` | Remove a data item by index |
-| `-s N`, `--story N` | Remove a story by index |
-| `-f N`, `--fact N` | Remove a fact-check report from a story by index |
-| `-F`, `--clear-facts` | Clear all fact-checks (and segments) from a story (`-s`) or all stories |
-| `--all-stories` | Apply `--clear-facts` to every story in the container |
+| `-s N`, `--story N` | Remove a report and its associated raw entry by index |
+| `-f N`, `--fact N` | Remove a fact-check report from a report by index |
+| `-F`, `--clear-facts` | Clear all fact-checks (and segments) from a report (`-s`) or all reports |
+| `--all-stories` | Apply `--clear-facts` to every report in the container |
 | `-v`, `--verbose` | Verbose output |
 | `-q`, `--quiet` | Minimal output |
 
@@ -4715,9 +4816,9 @@ st-rm -F --all-stories subject.json  # clear all fact-checks from every story
 
 ## For developers
 
-Deletes data items, stories, or fact-check reports from a .json container.
-Supports bulk-clearing all fact-checks and claim segments from one story or
-every story in the container.
+Deletes complete report/raw pairs, unowned data items, or fact-check records from a .json container.
+Supports bulk-clearing all fact-checks and claim segments from one report or
+every report in the container.
 
 
 All index arguments are 1-based, matching the output of st-ls.
@@ -5000,6 +5101,622 @@ Score formula: `w1 × (fact_score / max_fact_score) + w2 × (speed_score / max_s
 ## Additional current options
 
 - `--score-weights`: Override composite-score weights, e.g. 'cov=0.25,comp=0.25,acc=0.40,cal=0.10'. Keys: cov, comp, acc, cal (or full names).
+
+### st-update-examples
+
+# st-update — three worked examples
+
+> All organizations, prices, measurements, comments, and results below are fictional teaching inputs. No generation, checking, or publishing commands were run to produce this document.
+
+## How to read the examples
+
+Each example creates one initial report, then appends two updated reports in the same container. The labels **report 1**, **report 2**, and **report 3** refer to command indices, not permanent content versions or text added to the report. Normal Cross attribution remains.
+
+The reports and semantic change summaries below are illustrative teaching examples; actual summaries include deterministic Markdown line counts and AI explanations. Use `--show-summary -s N` to read a saved summary again without generating another output.
+
+The sequence is **create → generate → list → inspect/edit → optionally post → update → review the saved result**. `st-update` opens the request editor, generates and saves the output, and prints a change summary. `--update-summary` is the concise default; `--update-details` provides more detail. Review includes the full saved report; no separate plan approval is required.
+
+`-s N` selects the source and is required whenever multiple reports exist. A normal update appends an output and prints its assigned index. `--iterate N` instead reopens an existing output's update prompt and replaces that output using the selected source. Source and output may be the same report. Replacement is prepared in temporary entries and saved only on success. See the [selection and first-call rules](st-update#select-the-source-and-output).
+
+The full reports below follow the append path. Iteration and removal commands are alternative next actions; do not run every command as a batch. After deleting an entry, later indices shift down. No active-report state is shared between commands.
+
+Fact-checking is off in these examples. Supplied observations are not independently verified, and updates do not browse for evidence or publish automatically.
+
+**Posting note:** `MySite` means a configured Discourse site. A published post remains independent of the local report. After posting an initial report, an update with the same title cannot be posted to that same site again . Choose a distinct posting title with `st-edit -s N --title FILE.json` before a later `st-post`. The report bodies below keep their headings consistent to make content changes easy to compare.
+
+## Example 1: Fill gaps in a human-edited report
+
+**Question this answers:** Can I add missing considerations without losing my own edits or the report’s formatting?
+
+**Scenario:** A volunteer organizer compares two rooms for a workshop. The initial prompt asked for paragraphs, but the organizer replaced that section with a table and added the sentence “Keep the event welcoming and practical.” The saved, edited Markdown is the source for the first update.
+
+The user runs `st-new workshop` to create `workshop.prompt`.
+
+### Initial prompt
+
+```text
+Write a short report helping a volunteer organizer choose a room for a
+10-person workshop. Use the headings Options and Recommendation, with
+short paragraphs. Keep the tone practical and welcoming.
+
+Supplied quotes:
+- Cedar Room: $40 room hire, capacity 16.
+- Main Hall: $70 room hire, capacity 24.
+Choose a room on the information available. Identify missing information.
+```
+
+After creating the prompt, the user generates, lists, and edits the report:
+
+```bash
+st-gen workshop.prompt
+st-ls workshop.json
+st-edit -s 1 --markdown workshop.json
+```
+
+### Report 1 — initial output, including the human edits
+
+```markdown
+# Workshop venue choice
+
+## Options
+
+| Room | Hire | Capacity |
+|---|---:|---:|
+| Cedar Room | $40 | 16 |
+| Main Hall | $70 | 24 |
+
+Both rooms can accommodate the planned 10 participants. The supplied quotes cover room hire only; access arrangements and other event costs have not been confirmed.
+
+## Recommendation
+
+Choose Cedar Room provisionally: it accommodates the group and costs $30 less. Confirm access arrangements before booking.
+
+Keep the event welcoming and practical.
+```
+
+The report is satisfactory, so the user posts it to Discourse:
+
+```bash
+st-post -s 1 --site MySite workshop.json
+```
+
+`workshop.json` contains one report with no fact-checks.
+
+### First update — add the missing accessibility information
+
+The user has learned that two participants need step-free access. The venue coordinator confirms that Cedar Room is reached only by stairs, while Main Hall has step-free access. The user wants to add this information and revise the recommendation.
+The user runs `st-update workshop.json` to open the editor for the update prompt below.
+The command could have been `st-update -s 1 workshop.json` to explicitly select report 1 as the source. Because it is the only report, it can be selected without `-s`. Once the container has more than one report, `-s <index>` is required; there is no highest-numbered or active-report default.
+
+**Update prompt:**
+
+```text
+Two participants need step-free access. The venue coordinator has confirmed
+that Cedar Room is reached only by stairs and Main Hall has step-free access.
+Add this information and revise the recommendation. Attendance is still 10.
+```
+
+st-update submits the request to the AI with the saved Markdown from source report 1.
+Cross appends report 2 and its associated raw generation entry to the same container, then prints the assigned report index.
+By default, st-update prints a summary of the generated changes.
+The user could have selected `--update-details` to see a detailed view of the generated changes, including the AI’s stated source for each change and any uncertainties, plus the exact Markdown diff. Source attributions are not independently verified.
+
+From this point the user has options. If report 2 is acceptable, the user can choose a distinct posting title and publish it with `st-post -s 2 --site MySite workshop.json`. If the user wants to make further changes, they can run `st-edit -s 2 --markdown workshop.json` to edit the report.
+
+To iterate on the report, the user has two main options:
+
+One, repeat the process to append report 3, report 4, and so on. Creating extra reports may or may not be desirable.
+The command `st-update -s 2 workshop.json` selects existing report 2 as the source and appends a new output. Cross assigns and prints the output index; the user does not supply or guess the next index.
+
+The second option is to edit the update prompt associated with report 2 and regenerate report 2.
+The command is `st-update -s 1 --iterate 2 workshop.json`: report 1 is the source, and existing report 2 holds the iterative prompt and receives the regenerated output. The previous update prompt is shown in the editor for editing. The AI then uses the source report and edited prompt to replace report 2 and prints a summary. Both indices must exist; `--iterate 2` does not allocate a new report.
+The power user might use `st-edit --view-only --markdown -s 2 workshop.json` to see the rendered markdown.
+
+To discard the saved output, the user runs `st-rm -s 2 workshop.json`. This removes report 2 and its associated raw-data entry. Later entries shift down if present; this does not remove a published post.
+
+**Context used:** the saved report 1 Markdown, its source prompt, and this update request. No checks or earlier raw AI output are needed. The old request for paragraphs must not remove the human’s table.
+
+**Summary after saving report 2 (illustrative):**
+
+```text
+Saved report 2 in workshop.json — based on report 1
+- Added access information for both rooms to the Options table.
+- Changed the recommendation to Main Hall for step-free access.
+- Retained attendance, prices, headings, and the human closing sentence.
+Evidence: venue coordinator information supplied in your update request.
+Limitations: no independent access check; other event costs remain unknown.
+View: st-edit --view-only --markdown -s 2 workshop.json
+```
+
+The detailed view would identify `U1: Options table — added Access column: Cedar Room = stairs only; Main Hall = step-free`, citing the coordinator statement, and `U2: Recommendation — changed to Main Hall`, citing the access requirement. These describe the saved report below. The user reviews that report before deciding whether to publish, edit, regenerate, continue, or discard it. No additional approval command is introduced here.
+
+**Report 2 — updated output:**
+
+```markdown
+# Workshop venue choice
+
+## Options
+
+| Room | Hire | Capacity | Access |
+|---|---:|---:|---|
+| Cedar Room | $40 | 16 | Stairs only |
+| Main Hall | $70 | 24 | Step-free |
+
+Both rooms can accommodate the planned 10 participants, but two participants need step-free access. The venue coordinator confirms that only Main Hall meets that requirement. The quotes cover room hire only; other event costs remain unconfirmed.
+
+## Recommendation
+
+Choose Main Hall. Its $30 higher hire cost provides the access this group needs. Cedar Room is unsuitable for the planned participants despite its lower price.
+
+Keep the event welcoming and practical.
+```
+
+**What changed:** an Access column and the recommendation. The title, two headings, table presentation, practical tone, and human closing sentence remain.
+
+### Second update — revise attendance and add the event budget
+
+The user runs `st-update -s 2 workshop.json`. Because the container now has two reports, source selection is required. Report 2 supplies the source, and Cross appends report 3 and prints its assigned index.
+
+This is a new update for changed circumstances. To refine the accessibility update without adding another report instead, use `st-update -s 1 --iterate 2 workshop.json`; that reopens its prior update request and replaces report 2.
+
+**Update prompt:**
+
+```text
+Attendance is now 18. Refreshments cost $3 per person. The total event budget
+is $120, with no other costs in this exercise. Main Hall has offered a new
+room-hire quote of $60, replacing its earlier $70 quote. Cedar stays at $40.
+Show total costs and confirm whether the recommendation still works.
+```
+
+**Context used:** the saved report 2, its associated update prompt, and this new request. No replay of report 1 is needed for this appended update; report 2 already contains the access requirement and human edits.
+
+The command saves report 3 and prints its update summary by default. The user could run `st-update -s 2 --update-details workshop.json` instead to request detailed review from that same update operation. Running another plain update afterward would create another report; it is not a command to redisplay the previous summary.
+
+```text
+Saved report 3 in workshop.json — based on report 2
+- Changed attendance to 18 and Main Hall hire to $60.
+- Added refreshments and totals: Cedar $94; Main Hall $114.
+- Retained the access requirement; Main Hall meets the $120 budget.
+Evidence: attendance, prices, and budget supplied in the update request.
+Limitations: costs and access have not been independently checked.
+```
+
+**Report 3 — updated output:**
+
+```markdown
+# Workshop venue choice
+
+## Options
+
+| Room | Hire | Capacity | Access | Refreshments | Total |
+|---|---:|---:|---|---:|---:|
+| Cedar Room | $40 | 16 | Stairs only | $54 | $94 |
+| Main Hall | $60 | 24 | Step-free | $54 | $114 |
+
+Attendance is now 18. Refreshments cost 18 × $3 = $54. Main Hall’s new $60 quote replaces its earlier $70 quote. These totals include all costs specified for this exercise.
+
+Cedar Room is below the $120 budget but cannot accommodate 18 people and lacks the step-free access two participants need. Main Hall meets both requirements and leaves $6 within the budget.
+
+## Recommendation
+
+Choose Main Hall at the revised quote. Its $114 total meets the budget, capacity, and access requirements. Confirm the booking against the new quote.
+
+Keep the event welcoming and practical.
+```
+
+**What changed:** attendance, one quote, cost columns, and budget analysis. Accessibility is retained without asking the user to repeat it. Cedar’s theoretical total is shown for comparison, not as an eligible recommendation.
+
+The user can now choose the appropriate action; these commands are alternatives, not a batch to run together:
+
+```bash
+st-ls workshop.json
+st-edit --view-only --markdown -s 3 workshop.json
+st-edit -s 3 --markdown workshop.json           # make manual changes
+st-update -s 2 --iterate 3 workshop.json         # refine the request and replace report 3
+st-post -s 3 --site MySite workshop.json        # publish the reviewed report
+st-rm -s 3 workshop.json                       # discard the local output instead
+```
+
+If circumstances change again, `st-update -s 3 workshop.json` appends report 4 from source report 3, provided report 3 was retained. Cross assigns the new index. Removing a local report does not undo an earlier Discourse post.
+
+**Lesson for st-ask:** “Use the saved report as it exists now, including human edits. Append for a new update; use `--iterate` to refine an existing output. The original prompt must not undo a table or wording the user added later.”
+
+## Example 2: Refresh a report as new data arrives
+
+**Question this answers:** How do I keep a report current without mixing old and new measurements?
+
+**Scenario:** A team reviews a fictional task-processing pilot. Each new log is a complete cumulative snapshot as of its stated date. It replaces the earlier counts; it is not another batch to add to them.
+
+**Standing brief, retained for all three outputs:** “Write a short internal pilot report with Status, Findings, and Next step headings. Use supplied logs only. Distinguish observed results from general conclusions.” This is explicit carried intent, not an automatically generated summary of old prompts.
+
+The user runs `st-new pilot` to create `pilot.prompt`, including the standing brief above and the prompt below in that file.
+
+### Initial prompt
+
+```text
+Using the standing brief, report the pilot position as of November 1, 2026.
+The supplied log contains 10 tasks: 6 completed, 2 pending, and 2 failed.
+These categories are mutually exclusive. Report completed tasks as a share
+of all recorded tasks. Do not treat pending tasks as failures or claim that
+this small pilot proves performance in general.
+```
+
+After saving the prompt, the user generates and inspects the initial report:
+
+```bash
+st-gen pilot.prompt
+st-ls pilot.json
+st-edit -s 1 --markdown pilot.json
+```
+
+### Report 1 — initial output
+
+```markdown
+# Task-processing pilot
+
+## Status
+
+As of November 1, 2026, the supplied pilot log contains 10 tasks.
+
+## Findings
+
+- Completed: 6 of 10 (60%).
+- Pending: 2 of 10.
+- Failed: 2 of 10.
+
+The completion share is provisional because two tasks remain pending. This small pilot does not establish performance outside the recorded tasks.
+
+## Next step
+
+Resolve the pending tasks and collect a larger sample before deciding whether to expand the pilot.
+```
+
+The container now contains one report with no fact-checks. The user may keep this internal report local, or publish it explicitly with `st-post -s 1 --site MySite pilot.json` after review.
+
+### First update — replace the counts with a larger snapshot
+
+The user runs `st-update pilot.json`, or explicitly `st-update -s 1 pilot.json`, and enters the request below in the editor. The command appends report 2 and prints a summary. Use `st-update --update-details pilot.json` instead when detailed review is wanted for this operation.
+
+**Update prompt:**
+
+```text
+Update the report as of November 8, 2026. The new cumulative log contains
+20 tasks in total: 14 completed, 4 pending, and 2 failed. It includes the
+original 10 tasks; do not add the snapshots together. Replace the current
+counts and completion share. Keep the limitations clear.
+```
+
+**Context used:** report 1, its prompt and included standing brief, and the new supplied snapshot/request. The date comes from the supplied log; `st-update` is not fetching live results.
+
+**Summary after saving report 2 (illustrative):**
+
+```text
+Saved report 2 in pilot.json — based on report 1
+- Replaced the November 1 snapshot with November 8 totals.
+- Changed completion to 14 of 20 (70%), pending to 4, and kept failed at 2.
+- Kept the small-sample limitation and updated the next action.
+Evidence: cumulative log supplied in the update request.
+Limitations: no independent log validation or explanation of outcome changes.
+```
+
+**Report 2 — updated output:**
+
+```markdown
+# Task-processing pilot
+
+## Status
+
+As of November 8, 2026, the supplied cumulative pilot log contains 20 tasks. This snapshot includes the original 10 tasks and replaces the earlier counts.
+
+## Findings
+
+- Completed: 14 of 20 (70%).
+- Pending: 4 of 20.
+- Failed: 2 of 20.
+
+The completion share remains provisional because four tasks are pending. The larger snapshot still does not establish performance outside the pilot or explain why outcomes differ.
+
+## Next step
+
+Resolve the four pending tasks and review the failure reasons before deciding whether to expand the pilot.
+```
+
+**What changed:** the reporting date, denominator, counts, and next action. The total is 20, not 30. The report retains its headings, bullet structure, and cautious interpretation.
+
+After reviewing the summary, the user can inspect the report with `st-edit --view-only --markdown -s 2 pilot.json`, edit it with `st-edit -s 2 --markdown pilot.json`, or publish it with `st-post -s 2 --site MySite pilot.json`.
+
+If the November 8 request needs correction, `st-update -s 1 --iterate 2 pilot.json` reopens that request and replaces report 2 after regeneration. If the output should be discarded, use `st-rm -s 2 pilot.json`. The following continuation assumes report 2 was retained.
+
+### Second update — close the same cohort
+
+The final log is new information, so the user runs `st-update -s 2 pilot.json`. The explicit source index is required because two reports exist. Cross appends report 3 from source report 2 and prints the new index.
+
+**Update prompt:**
+
+```text
+Use the final November 15, 2026 log for the same 20-task cohort: 16 completed,
+0 pending, and 4 failed. No new tasks were added. Update the report to show
+that this cohort is complete, while retaining the small-sample limitation.
+Recommend reviewing the four failures before any expansion decision.
+```
+
+**Context used:** the saved report 2, its associated update prompt, the retained standing brief, and the final log/request. Report 1 and its counts do not need to be sent again for this appended update.
+
+**Summary after saving report 3 (illustrative):**
+
+```text
+Saved report 3 in pilot.json — based on report 2
+- Replaced the counts with the final November 15 log for the same 20 tasks.
+- Changed completion to 16 of 20 (80%), pending to 0, and failed to 4.
+- Marked this cohort complete and retained the limit on general conclusions.
+Evidence: final cohort log supplied in the update request.
+Limitations: the log does not explain failures or establish wider performance.
+```
+
+**Report 3 — updated output:**
+
+```markdown
+# Task-processing pilot
+
+## Status
+
+As of November 15, 2026, the supplied final log covers the same 20-task cohort. No new tasks were added, and none remain pending.
+
+## Findings
+
+- Completed: 16 of 20 (80%).
+- Pending: 0 of 20.
+- Failed: 4 of 20.
+
+The cohort’s completion share is now final. These results describe this small pilot; they do not establish performance in other workloads or explain the failures.
+
+## Next step
+
+Review the four failures before deciding whether to expand. Use that review to define what a further pilot would need to test.
+```
+
+**What changed:** the final counts, provisional status, and next action. “Final” refers to this cohort’s supplied results, not independent fact-checking or a final decision to deploy.
+
+The user confirms the saved entries with `st-ls pilot.json` and views report 3 with `st-edit --view-only --markdown -s 3 pilot.json`. They can then publish it with `st-post -s 3 --site MySite pilot.json`, manually edit it with `st-edit -s 3 --markdown pilot.json`, refine its request with `st-update -s 2 --iterate 3 pilot.json`, or discard it with `st-rm -s 3 pilot.json`. These are alternatives. A later `st-update -s 3 pilot.json` appends another output from existing source report 3; Cross assigns and prints its index.
+
+**Lesson for st-ask:** “Supply new evidence and explain whether it replaces earlier measurements or adds to them. Review the saved result, then decide whether to keep, edit, iterate, publish, or discard it. Changing a date does not fetch current evidence.”
+
+## Example 3: Incorporate selected Discourse feedback
+
+**Question this answers:** Can I use community feedback without letting every comment rewrite the proposal?
+
+**Scenario:** A fictional makerspace publishes a shared-tool booking proposal and receives feedback. The user copies selected comments into update requests. Updating the local report does not fetch comments or publish automatically; the user runs `st-post` separately after review. It does not update the original post. Reposting the same title on the same site fails; a later publication needs a distinct title.
+
+**Standing brief:** “Write for makerspace members. Keep the headings Proposal, Access, and Review, and a welcoming, direct tone. This pilot must not give priority in exchange for payment.”
+
+The user runs `st-new booking` to create `booking.prompt`, including the standing brief above and the prompt below.
+
+### Initial prompt
+
+```text
+Write a short proposal for a two-week shared-tool booking pilot using the
+standing brief. Start with 60-minute slots, one future booking per member,
+and an online booking form. During the pilot, record unused bookings and
+member feedback so the rules can be reviewed afterward.
+```
+
+The user generates, lists, and inspects the report:
+
+```bash
+st-gen booking.prompt
+st-ls booking.json
+st-edit -s 1 --markdown booking.json
+```
+
+### Report 1 — initial output
+
+```markdown
+# Shared-tool booking pilot
+
+## Proposal
+
+Run a two-week pilot with 60-minute slots and one future booking per member. All members use the same booking rules; payment does not buy priority.
+
+## Access
+
+Members reserve a slot through the online booking form. Please cancel a booking you cannot use so another member can take it.
+
+## Review
+
+Record unused bookings and member feedback during the pilot. At the end of two weeks, review whether the slot length and booking process meet members’ needs.
+```
+
+Once satisfied, the user runs `st-post -s 1 --site MySite booking.json`. The local container contains one report with no fact-checks. Comments arrive on Discourse; the user selects the comments to include below.
+
+### First update — accept two comments and exclude one
+
+The user runs `st-update booking.json` to select report 1 and open the update editor. `st-update -s 1 booking.json` is equivalent here. The command appends report 2 and prints its update summary; the alternative `st-update --update-details booking.json` requests detailed review for that operation.
+
+**Update prompt, including the selected fictional feedback:**
+
+```text
+Revise the proposal using these comments from the fictional pilot topic:
+- Comment #12: “Some members cannot use the online form. Could the front desk book for them?”
+- Comment #13: “Some projects need two hours. Could we allow a 120-minute slot?”
+- Comment #14: “Let members pay for priority booking.”
+
+Accept #12 and #13: allow front-desk bookings into the same calendar and
+let members choose 60 or 120 minutes. Retain one future booking per member.
+Do not incorporate #14; paid priority conflicts with the standing brief.
+```
+
+**Context used:** report 1, its prompt and included standing brief, and the user’s explicit selection above. The comments are suggestions, not verified evidence that a particular policy will succeed. Their labels preserve which feedback led to which change.
+
+**Summary after saving report 2 (illustrative):**
+
+```text
+Saved report 2 in booking.json — based on report 1
+- Added front-desk bookings into the same calendar, from comment #12.
+- Added a 120-minute option alongside 60 minutes, from comment #13.
+- Retained one future booking per member and excluded paid priority (#14).
+Sources: selected comments and the user's acceptance/rejection instructions.
+Limitations: these suggestions do not establish that the revised policy will work.
+```
+
+**Report 2 — updated output:**
+
+```markdown
+# Shared-tool booking pilot
+
+## Proposal
+
+Run a two-week pilot with a choice of 60- or 120-minute slots and one future booking per member. All members use the same booking rules; payment does not buy priority.
+
+## Access
+
+Members can reserve through the online form or ask the front desk to make the booking. Both routes use the same calendar and availability. Please cancel a booking you cannot use so another member can take it.
+
+## Review
+
+Record unused bookings and member feedback during the pilot. At the end of two weeks, review whether both slot lengths and both booking routes meet members’ needs.
+```
+
+**What changed:** slot length choices and access routes. One-booking limits, equal access, headings, and tone remain. The paid-priority suggestion does not become policy merely because it appeared in the input.
+
+The user inspects report 2 with `st-edit --view-only --markdown -s 2 booking.json`. They may edit it with `st-edit -s 2 --markdown booking.json` or refine the same update with `st-update -s 1 --iterate 2 booking.json`. When satisfied and after choosing a distinct posting title, `st-post -s 2 --site MySite booking.json` publishes the selected output as a separate action. Alternatively, `st-rm -s 2 booking.json` discards the local output; it does not remove a published post.
+
+### Second update — respond to pilot observations
+
+Assuming report 2 was retained, the user runs `st-update -s 2 booking.json`. Report 2 is the explicitly selected source; Cross appends report 3 and prints its index.
+
+**Update prompt:**
+
+```text
+The organizer’s supplied first-week log records four bookings where nobody
+arrived. It does not record reasons or the total number of bookings, so do
+not calculate a no-show rate or blame a booking route.
+
+New fictional comment #20 suggests a reminder and releasing unused slots.
+For the remainder of the pilot, add an opt-in reminder by the member’s chosen
+available contact method. If the member is 15 minutes late and has not
+contacted the front desk, release the remaining booked time for someone else.
+Keep both booking routes and slot lengths, and do not add penalties or fees.
+```
+
+**Context used:** the saved report 2, its immediate update prompt as previous intent, the retained standing brief, and this request/log. The instruction to reject paid priority remains in effect. No earlier full report or automatic topic fetch is needed for this appended update.
+
+**Summary after saving report 3 (illustrative):**
+
+```text
+Saved report 3 in booking.json — based on report 2
+- Added an opt-in reminder and a 15-minute release rule, following comment #20.
+- Added the observation of four unattended bookings without inventing a rate.
+- Kept both booking routes, both slot lengths, and the prohibition on fees.
+Sources: organizer's supplied log, selected comment, and user instructions.
+Limitations: the total booking count and reasons for absence are unknown.
+```
+
+**Report 3 — updated output:**
+
+```markdown
+# Shared-tool booking pilot
+
+## Proposal
+
+Continue the two-week pilot with a choice of 60- or 120-minute slots and one future booking per member. All members use the same booking rules; payment does not buy priority. No penalties or fees are introduced.
+
+## Access
+
+Members can reserve through the online form or ask the front desk to make the booking. Both routes use the same calendar and availability. Please cancel a booking you cannot use so another member can take it.
+
+For the remainder of the pilot, offer an opt-in reminder using the member’s chosen available contact method. If a member is 15 minutes late and has not contacted the front desk, release the remaining booked time for someone else.
+
+## Review
+
+The organizer’s first-week log records four unattended bookings. Without the total booking count or reasons, it does not establish a no-show rate or show that either booking route caused the problem.
+
+Continue recording unused bookings and member feedback. At the end of two weeks, review both slot lengths, both booking routes, and members’ experience of the reminder and release rules.
+```
+
+**What changed:** the reminder/release proposal and the review evidence. Earlier accepted improvements survive. Generating the report sends no reminders, edits no calendar, and publishes nothing automatically.
+
+The user runs `st-ls booking.json` and `st-edit --view-only --markdown -s 3 booking.json` to find and inspect the result. They can publish with `st-post -s 3 --site MySite booking.json`, edit with `st-edit -s 3 --markdown booking.json`, regenerate in place with `st-update -s 2 --iterate 3 booking.json`, or discard locally with `st-rm -s 3 booking.json`. A further `st-update -s 3 booking.json` appends another output if source report 3 was retained; Cross assigns the new index. These are alternative next actions, not an automatic chain.
+
+**Lesson for st-ask:** “Choose which feedback becomes instructions. Preserve the source references, but do not treat every comment as a fact or an accepted change. Generating a revision does not publish it.”
+
+### st-update
+
+# st-update — update a saved report
+
+`st-update` uses a saved report, your update instructions, and any supplied evidence to generate an updated report. It saves the result and then shows what changed. Your original report remains available when you append an output.
+
+```bash
+st-update report.json                    # one report exists: append an update
+st-update -s 1 report.json               # select the source explicitly
+st-update -s 1 --iterate 2 report.json    # replace existing output 2 from source 1
+st-update -s 2 --iterate 2 report.json    # use edited output 2 as its own source
+```
+
+## Select the source and output
+
+`-s N` selects the existing source report. It is required when the container has multiple reports. Run `st-ls report.json` to inspect the current indices. A normal update appends a raw generation entry and prepared report; Cross prints the assigned output index.
+
+`--iterate N` selects an existing update output to replace. Its saved update request opens in your editor so you can refine it. Both replacement entries are prepared before they are saved together. Successful iteration discards that output's previous content and raw response. Omit `--iterate` to retain them and append another output.
+
+On the first update, a valid `--iterate N` is ignored with this message:
+
+```text
+Ignoring --iterate: no previous st-update output exists in this container.
+```
+
+Every supplied index must still exist; `--iterate` never reserves a future index. Once updates have existed, the target must have an associated update request. Removing previous updates does not reset this first-call rule. Ambiguous raw/report associations in older containers are rejected with guidance rather than guessed.
+
+## Describe the change
+
+Without `--prompt`, Cross opens your configured editor, followed by Aspell when available. A normal append starts with an empty request; iteration starts with the target's saved request. A supplied prompt file skips the editor:
+
+```bash
+st-update -s 1 --prompt changes.prompt --evidence observations.md --update-details report.json
+```
+
+The request and evidence files must be UTF-8. Repeat `--evidence` to include multiple files. Non-interactive use requires `--prompt FILE`. Empty requests cancel; unsuccessful editor or spell-check exits abort without saving. If generation fails after editing, Cross prints the retained request draft’s path so you can retry.
+
+Inputs have a conservative 96,000-byte local limit. Oversized input is rejected before the AI call without dropping material; `CROSS_UPDATE_MAX_INPUT_BYTES` can override it for a model whose limits you know.
+
+The saved source Markdown includes your manual edits. The update request takes precedence over earlier instructions; useful original intent is retained. If you manually edit output 2 and want those edits to be the next source, use `-s 2`. Using `-s 1 --iterate 2` regenerates output 2 from source 1 instead.
+
+The command makes one AI generation call using the selected agent. It does not browse for evidence. Supplied observations and AI explanations are not independently verified.
+
+## Review the saved result
+
+`--update-summary` is the concise default. It shows line additions/removals computed from the actual saved Markdown and the AI's explanation of its changes. `--update-details` also shows the exact Markdown diff, along with the AI's stated reasons, sources, and uncertainties. Those reasons and source attributions are AI explanations, not verified evidence.
+
+Read the complete report before deciding whether to keep or publish it:
+
+```bash
+st-edit --view-only --markdown -s 2 report.json
+st-update -s 2 --show-summary --update-details report.json
+```
+
+`--show-summary` reads the saved summary without editing, generation, or an AI call. It requires `-s N` when multiple reports exist. If the report has been manually edited since generation, Cross explains that the summary describes the generated output. It cannot be combined with update inputs or generation options.
+
+Review happens after the successful save. There is no separate approval command. To discard the output, use `st-rm -s 2 report.json`; its associated raw entry is removed too, and later indices shift down. Run `st-ls` again before reusing an old index. Other commands retain their existing defaults; an update does not establish a shared active report.
+
+## Options
+
+| Option | Purpose |
+|---|---|
+| `-s N`, `--story N` | Existing source index; displayed output index with `--show-summary` |
+| `--iterate N` | Replace an existing update output and its raw entry |
+| `--prompt FILE` | Read update instructions instead of opening the editor |
+| `--evidence FILE` | Include supplied local evidence; repeatable |
+| `--agent NAME` | Use a configured [agent](Agents) |
+| `--update-summary` | Concise summary of the generated changes; default |
+| `--update-details` | Detailed notes and exact Markdown diff |
+| `--show-summary` | Redisplay a saved summary without generation |
+| `--no-cache` | Bypass the AI cache; does not fetch new evidence |
+| `--no-spell` | Skip optional editor spell checking |
+| `-q`, `--quiet` | Suppress progress while retaining the result and summary |
+| `-v`, `--verbose` | Additional diagnostics |
+
+Generation, preparation, or concurrent-write failures leave the existing container unchanged. Updated content starts without inherited fact-checks or publication state. Run `st-fact` or `st-cross` separately when you want checking. Posting is also explicit, and local changes do not alter an existing Discourse post. Choose a distinct title before posting another report to the same site under a title already published there.
+
+**Related:** [Worked examples](st-update-examples) · [Container format](Container-Format) · [st-edit](st-edit) · [st-rm](st-rm) · [st-fact](st-fact) · [st-post](st-post)
 
 ### st-verdict
 
@@ -5626,14 +6343,14 @@ Source: `cross_st/st-bang.py`.
 Source: `cross_st/st-cat.py`.
 
 - `json_file`: Path to the JSON file
-- `-s`, `--story`: Story number (integer), default: 1
+- `-s`, `--story`: Report number (integer), default: 1
 - `-f`, `--fact`: Fact-check report number (integer), default: none
-- `--markdown`: Story markdown, default: off
-- `--hashtags`: Story hashtags, default: off
-- `--spoken`: Story spoken text, default: off
-- `--text`: Story text body, default: off
-- `-t`, `--title`: Story title, default: off
-- `--prompt`: Print the original prompt text stored in the container (default if no other field specified)
+- `--markdown`: Report markdown, default: off
+- `--hashtags`: Report hashtags, default: off
+- `--spoken`: Report spoken text, default: off
+- `--text`: Report text body, default: off
+- `-t`, `--title`: Report title, default: off
+- `--prompt`: Print the selected report’s authored prompt (default if no other field specified)
 - `-v`, `--verbose`: Verbose output, default: off
 - `-q`, `--quiet`: Enable minimal output
 
@@ -5649,7 +6366,7 @@ Source: `cross_st/st-cross.py`.
 - `--skip-gen`: Skip Step 1 (story generation). Normally auto-detected: if all AI stories already exist in the container, Step 1 is skipped automatically without this flag.
 - `-v`, `--verbose`: Enable verbose output. Implies no live table in Step 2 — per-cell 'Generating fact-check: …' lines would otherwise interleave with the live redraw. Step 1 (generation) still shows its live table.
 - `-q`, `--quiet`: Suppress live table (minimal output).
-- `--dry-run`: Preview the Step 2 matrix without running anything. Shows pending vs already-complete cells, a per-row and per-column summary, and exits. Useful before committing 30+ minutes to a full N×N run. Implies --skip-gen.
+- `--dry-run`: Preview the Step 2 matrix without running anything. Shows pending vs already-complete cells, a per-row and per-column summary, and exits. Useful before committing 30+ minutes to a full matrix run. Implies --skip-gen.
 - `-p`, `--parallel`: Run cells in parallel, gated by per-provider rate-limit semaphores (default).
 - `--sequential`: Run cells one at a time. Useful for debugging or very low-quota accounts.
 - `--max-concurrency`: Override the per-provider concurrency cap. Default: uses cross_ai_core.get_rate_limit_concurrency() per make (xai=3, anthropic=2, openai=3, perplexity=2, gemini=5).
@@ -5674,7 +6391,7 @@ Source: `cross_st/st-domain.py`.
 Source: `cross_st/st-edit.py`.
 
 - `json_file`: Path to the JSON file
-- `-s`, `--story`: Story data selected (integer), default 1
+- `-s`, `--story`: Report selected (integer), default 1
 - `-f`, `--fact`: Fact-check to edit (integer), default None
 - `-spoken`, `--spoken`: Edit the text to speech source text default: do not edit
 - `-md`, `--markdown`: Edit the markdown data, default: do not edit
@@ -5878,11 +6595,11 @@ Source: `cross_st/st-post.py`.
 
 - `files`: Files of to process
 - `--site`: Select Discourse site to use, default is [configured value]
-- `-s`, `--story`: Select story to publish: default 1
+- `-s`, `--story`: Select report to publish: default 1
 - `-f`, `--fact`: Reply with fact-check to the post, default: no reply
 - `--category`: Where to post. Accepts: "private" (your private area), a numeric Discourse category ID, or — on crossai.dev only — "test" (id=6, sandbox cleared daily), "reports" (id=16, public portfolio), "prompt-lab" (id=17). Default: "test".
 - `--check`: Validate Discourse credentials and connection without posting
-- `--prompt`: Post the prompt text from the container instead of the story (useful with --category prompt-lab)
+- `--prompt`: Post the prompt text from the container instead of the report (useful with --category prompt-lab)
 - `-v`, `--verbose`: Verbose output, default: verbose off
 - `-q`, `--quiet`: Enable minimal output
 
@@ -5930,7 +6647,7 @@ Source: `cross_st/st-rm.py`.
 
 - `json_file`: Path to the JSON file
 - `-d`, `--data`: Remove a data item (integer index)
-- `-s`, `--story`: Remove a story (integer index)
+- `-s`, `--story`: Remove a report and its associated raw data (integer index)
 - `-f`, `--fact`: Remove a fact-check report from a story (integer index)
 - `-F`, `--clear-facts`: Clear all fact-checks (and segments) from a story (-s) or all stories
 - `--all-stories`: Apply --clear-facts to every story in the container
@@ -5998,6 +6715,23 @@ Source: `cross_st/st-stones.py`.
 - `--ai-story`: Generate a comprehensive story (800–1200 words) → stdout
 - `--agent`: Agent to use for content generation  (default: [configured value])
 
+### st-update
+
+Source: `cross_st/st-update.py`.
+
+- `json_file`: Existing report container
+- `-s`, `--story`: Existing source index; required with multiple reports (display index with --show-summary)
+- `--iterate`: Existing output to regenerate; never a future index
+- `--prompt`: Read update instructions from a UTF-8 file instead of the editor
+- `--evidence`: Supplied UTF-8 evidence; repeatable
+- `--update-summary`: Concise generated-change summary (default)
+- `--update-details`: Detailed change notes and exact Markdown diff
+- `--show-summary`: Read the selected output's saved summary without generation or editing
+- `--no-cache`: Bypass AI cache; does not fetch new evidence
+- `--no-spell`: Skip optional Aspell when using the editor
+- `-q`, `--quiet`: Suppress progress, retaining result and summary
+- `-v`, `--verbose`: Show additional diagnostics
+
 ### st-verdict
 
 Source: `cross_st/st-verdict.py`.
@@ -6063,6 +6797,25 @@ Cross uses Calendar Versioning (`YYYY.M.R`).
 ---
 
 ## [Unreleased]
+
+### Added
+- `st-update` generates an updated report from saved Markdown, an authored request,
+  and optional local evidence. Append a new output or replace an existing update
+  with `--iterate N`; review actual changes with concise or detailed summaries.
+- `st-update --show-summary` reads a saved change summary without another AI call.
+- Three worked update examples covering human edits, new observations, and selected feedback.
+
+### Changed
+- Report scoring, chart labels, and listings keep separate outputs from the same
+  provider/model distinct and use each report's authored requirements.
+- Raw-generation IDs explicitly associate prepared reports with their source
+  records so updates and removals can operate on complete pairs.
+- `st-cross` checks every saved report against configured agents, including
+  additional same-agent updates; resume and force support rectangular matrices.
+- Manual edits remain in place and invalidate stale checks/exports. Check and
+  publication saves reject attachment to changed content; remote receipts remain
+  independent of local replacement or removal.
+- `st-man` discovers all installed commands, including `st-update`.
 
 ---
 

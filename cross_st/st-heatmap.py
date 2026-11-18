@@ -43,6 +43,20 @@ from mmd_plot import show_plot
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def _chart_frame(flattened):
+    """Label repeated authors by their current report positions."""
+    frame = pd.DataFrame(flattened)
+    if "report_label" in frame:
+        # Preserve legacy field names while displaying checker/report axes.
+        frame["target"] = frame["report_label"]
+        frame["evaluator"] = frame["target_make"] + ":" + frame["target_model"]
+        frame.attrs["report_identity"] = True
+    else:
+        frame["evaluator"] = frame["evaluator_make"] + ":" + frame["evaluator_model"]
+        frame["target"] = frame["target_make"] + ":" + frame["target_model"]
+    return frame
+
+
 def valid_directory(path_str):
     """Validate or create the output directory; return path with trailing separator."""
     path = Path(path_str).resolve()
@@ -57,11 +71,12 @@ def valid_directory(path_str):
 def extract_story_titles(container):
     """Return a compact make/model: title list from the container."""
     lines = []
-    for s in container.get("story", []):
+    for index, s in enumerate(container.get("story", [])):
         make  = s.get("make",  "?")
         model = s.get("model", "?")
         title = s.get("title", "")[:90]
-        lines.append(f"  {make}/{model}: {title}")
+        from _report_signals import report_author_key
+        lines.append(f"  {report_author_key(container, index)}: {title}")
     return "\n".join(lines)
 
 
@@ -340,12 +355,10 @@ def main():
               f"A minimum 2×2 matrix is required.")
         sys.exit(1)
 
-    df = pd.DataFrame(flattened)
+    df = _chart_frame(flattened)
     if "summary" in df.columns:
         df = df.drop(columns=["summary"])
 
-    df["evaluator"] = df["evaluator_make"] + ":" + df["evaluator_model"]
-    df["target"]    = df["target_make"]    + ":" + df["target_model"]
 
     if args.verbose:
         print(f"Loaded {len(df)} fact-check entries from {file_json}")

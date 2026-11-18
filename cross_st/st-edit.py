@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """
-st-edit — Edit or view story fields in a container
+st-edit — Edit or view report fields in a container
 
 ```
-st-edit subject.json                    # edit story 1 in $EDITOR
-st-edit -s 2 subject.json              # edit story 2
-st-edit --field markdown subject.json  # edit the markdown field
-st-edit --view subject.json            # view without editing
+st-edit --markdown subject.json                    # edit report 1 in $EDITOR
+st-edit --markdown -s 2 subject.json               # edit report 2 in place
+st-edit --view-only --markdown subject.json        # view without editing
 ```
 
-Options: -s story  --field  --view  -v  -q
+Markdown/text edits rebuild derived text and speech and clear prior checks.
+Saved raw generation and update requests remain associated with the report.
+
+Options: -s report  --markdown  --text  --title  --spoken  --view-only  -v  -q
 """
 
 import argparse
@@ -21,6 +23,9 @@ import tempfile
 import threading
 import time
 import subprocess
+import shlex
+from _report_store import load_snapshot, save_snapshot, StoreError, raw_index, ensure_data_id, authored_prompt
+from _report_content import edited_report, archive_publication
 from mmd_startup import load_cross_env, require_config
 
 
@@ -29,7 +34,7 @@ def main():
     load_cross_env()
     parser = argparse.ArgumentParser(
         prog='st-edit',
-        description='Edit or view the title, text, markdown, or spoken text of a story.'
+        description='Edit or view the title, text, markdown, or spoken text of a report.'
                     '\nRun st-gen first.')
 
     # A json file is required
@@ -37,7 +42,7 @@ def main():
                         help='Path to the JSON file', metavar='file.json')
     # Data selection is optional, default select data 1
     parser.add_argument('-s', '--story', type=int, default=1,
-                        help='Story data selected (integer), default 1')
+                        help='Report selected (integer), default 1')
     parser.add_argument('-f', '--fact', type=int,
                         help='Fact-check to edit (integer), default None')
     parser.add_argument('-spoken', '--spoken', action='store_true',
@@ -84,11 +89,10 @@ def main():
             print(f"Error: The file {args.json_file} does not exist.")
             sys.exit(1)
 
-        with open(file_json, 'r') as file:
-            main_container = json.load(file)
+        main_container, fingerprint = load_snapshot(file_json)
 
         if args.verbose:
-            print(f"Story container {file_json} successfully read.")
+            print(f"Report container {file_json} successfully read.")
 
     except json.JSONDecodeError:
         print(f"Error: The file {file_json} contains invalid JSON.")
@@ -100,7 +104,7 @@ def main():
     story_index = args.story - 1  # Starts at 1, not 0
     stories = main_container.get("story", [])
     if not stories or story_index >= len(stories) or story_index < 0:
-        print(f"No such story: {story_index + 1}")
+        print(f"No such report: {story_index + 1}")
         sys.exit(1)
 
     story = stories[story_index]
@@ -123,11 +127,12 @@ def main():
         length = len(story.get("fact", []))
         if 1 <= args.fact <= length:  # Validate range
             fact_obj = story["fact"][args.fact - 1]
-            text_to_edit = fact_obj.get("report")
+            text_to_edit = fact_obj.get("report") or ""
         else:
             print(f"Fact item out of range {args.fact}")
+            sys.exit(1)
     else:
-        text_to_edit = story[item]
+        text_to_edit = story.get(item, "")
 
     # Record the hash, to determine if any mods are made and disk write is necessary
     md5_hash = hashlib.md5(text_to_edit.encode('utf-8')).hexdigest()
@@ -147,7 +152,7 @@ def main():
     import shutil as _shutil
     import subprocess as _sp_grip
     _grip_bin = _shutil.which("grip") or os.path.join(os.path.dirname(sys.executable), "grip")
-    if not os.path.isfile(_grip_bin):
+    if (args.view or args.view_only) and not os.path.isfile(_grip_bin):
         print("  grip not installed — installing now (one-time, ~2 MB)…", flush=True)
         _install = _sp_grip.run(
             [sys.executable, "-m", "pip", "install", "--quiet", "grip"],
@@ -341,7 +346,7 @@ def main():
         try:
             time.sleep(1)  # Brief pause so grip is ready before vi opens
             editor_was_active = True
-            subprocess.run([os.getenv("EDITOR", "vi"), temp_path])
+            editor_result = subprocess.run([*shlex.split(os.getenv("EDITOR", "vi")), temp_path])
 
         finally:
             if grip_process is not None:
@@ -350,9 +355,13 @@ def main():
                 grip_process.kill()
     else:  # Edit only
         editor_was_active = True
-        subprocess.run([os.getenv("EDITOR", "vi"), temp_path])
+        editor_result = subprocess.run([*shlex.split(os.getenv("EDITOR", "vi")), temp_path])
 
     if editor_was_active:
+        if editor_result.returncode != 0:
+            os.remove(temp_path)
+            print("Editor exited unsuccessfully; nothing saved.")
+            sys.exit(1)
         # Editing is complete, read updated content
         with open(temp_path, "r") as temp_file:
             updated_content = temp_file.read()
@@ -368,10 +377,24 @@ def main():
                 # data by reference updates the specific story fact item
                 fact_obj["report"] = updated_content
             else:
-                story[item] = updated_content
+                if not updated_content:
+                    print("Empty content; nothing saved.")
+                    sys.exit(1)
+                # Capture only provable provenance before changing the saved body.
+                prompt = authored_prompt(main_container, story_index)
+                raw_position = raw_index(main_container, story_index)
+                if raw_position is not None:
+                    story["source_data_id"] = ensure_data_id(main_container["data"][raw_position])
+                if prompt:
+                    story.setdefault("authored_prompt", prompt)
+                archive_publication(main_container, story)
+                main_container["story"][story_index] = edited_report(story, item, updated_content)
             # Save container back to disk
-            with open(file_json, 'w', encoding='utf-8') as f:
-                json.dump(main_container, f, ensure_ascii=False, indent=4)
+            try:
+                save_snapshot(file_json, main_container, fingerprint)
+            except (StoreError, OSError) as exc:
+                print(f"Error: {exc}")
+                sys.exit(1)
 
             if not args.quiet:
                 print(f"Container updated: {file_json}")

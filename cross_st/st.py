@@ -77,12 +77,11 @@ cat_sel = _default_cat_for(_active_site_dict())  # Session-level post category
 
 # Commands that mutate the .json container — state is re-read after these run.
 # st.py builds and fires the command; the st-* tool owns all the logic.
-# Note: st-edit is intentionally excluded — view-only and edit operations do not
-# require a container refresh, and refreshing would reset story_sel to 1.
+# Refresh preserves the selected report and clamps selectors when needed.
 POST_CMD_REFRESH = {
     "st-gen", "st-prep", "st-bang", "st-merge",
     "st-fact", "st-cross", "st-analyze",
-    "st-fix", "st-rm",
+    "st-fix", "st-rm", "st-edit", "st-update",
 }
 
 menus = {
@@ -104,6 +103,7 @@ menus = {
             "f": "List fact-checks",
         }),
         "e": ("Edit", {
+            "u": "Update selected report from a new request",
             "T": "Edit title",
             "m": "Edit markdown",
             "M": "Edit markdown with browser view",
@@ -308,6 +308,8 @@ def execute_menu(menu_name, choice):
 
         case "Edit":
             match choice:
+                case "u":
+                    cmd = f"st-update --agent {ai} -s {story_sel} {file_json}"
                 case "T":
                     cmd = f"st-edit --title -s {story_sel} {file_json}"
                 case "m":

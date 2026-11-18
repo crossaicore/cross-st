@@ -144,8 +144,8 @@ def main():
     if not stories:
         print("Story list empty")
     else:
-        # VRD-10c: composite "best author" score, keyed by make:model so we
-        # don't collide when two stories share a make but differ on model.
+        # Composite scores use report display keys so separate outputs from
+        # the same provider/model keep their own score.
         # Falls back to legacy fact-score average when the scorer can't run
         # (e.g. an empty container).
         try:
@@ -177,7 +177,9 @@ def main():
                 "quality": "merge",
                 "simple":  "merge:simple",
             }
-            if fix_mode:
+            if story.get("update_request") or story.get("_generated_by") == "st-update":
+                flag = "[update]"
+            elif fix_mode:
                 flag = f"[{_FIX_LABEL.get(fix_mode, fix_mode)}]"
             elif merge_mode:
                 sources = story.get("merge_sources", [])
@@ -192,7 +194,8 @@ def main():
             segs_str = str(n_segs) if n_segs else "-"
 
             # VRD-10c: composite score replaces the legacy fact-score mean.
-            _author_id = f"{story.get('make') or '?'}:{story.get('model') or '?'}"
+            from _report_signals import report_author_key
+            _author_id = report_author_key(main_container, i - 1)
             _aus = _scores_by_author.get(_author_id)
             if _aus is not None:
                 avg_score_str = f"{_aus.composite:+.3f}"

@@ -16,6 +16,7 @@ st-prep -d 1 --all subject.json   # export md, mp3, title, and txt files
 Options: -d data  -a all  --markdown  --mp3  --title  --txt  --bang  -v  -q
 """
 
+from _report_store import load_snapshot, save_snapshot, ensure_data_id
 import argparse
 import hashlib
 import json
@@ -94,8 +95,7 @@ def main():
                 print(f"Error: The file {file_json} does not exist.")
             sys.exit(1)
 
-        with open(file_json, 'r') as file:
-            main_container = json.load(file)
+        main_container, file_fingerprint = load_snapshot(file_json)
 
         if args.verbose:
             print(f"Story container {file_json} successfully read.")
@@ -114,7 +114,13 @@ def main():
             select_data  = main_container["data"][args.data - 1]
             select_make  = select_data["make"]
             select_model = select_data["model"]
-            if select_make in get_ai_list():
+            linked_report = next((r for r in main_container.get("story", [])
+                                  if select_data.get("data_id") and r.get("source_data_id") == select_data["data_id"]), None)
+            if linked_report is not None:
+                all_raw_story_text = linked_report.get("markdown") or linked_report.get("text", "")
+            elif select_data.get("_generated_by") == "st-update" and select_data.get("markdown"):
+                all_raw_story_text = select_data["markdown"]
+            elif select_make in get_ai_list():
                 all_raw_story_text = get_data_content(select_make, select_data)
             else:
                 # st-fetch entries (make="url", model="file"/"clipboard"/etc.)
@@ -127,7 +133,10 @@ def main():
         print("Missing data in container")
         sys.exit(1)
 
-    # Massage raw data into a publishable story
+    linked_report = next((r for r in main_container.get("story", [])
+                          if select_data.get("data_id") and r.get("source_data_id") == select_data["data_id"]), None)
+
+    # Massage raw data into a publishable report
     file_md_content = remove_story_break(all_raw_story_text)
 
     select_hashtags = get_hashtags(file_md_content)
@@ -159,6 +168,14 @@ def main():
         else:
             print(f"Title: {file_title_content}")
 
+    # Re-preparation of an existing pair preserves saved human edits and facts.
+    if linked_report is not None:
+        file_md_content = linked_report.get("markdown") or linked_report.get("text", "")
+        file_txt_content = linked_report.get("text", "")
+        file_title_content = linked_report.get("title", "")
+        as_spoken = linked_report.get("spoken", "")
+        select_hashtags = linked_report.get("hashtags", [])
+
     if args.mp3:
         from _tts import render_audio
         render_audio(as_spoken, file_mp3, quiet=args.quiet, verbose=args.verbose)
@@ -185,10 +202,13 @@ def main():
     if "story" not in main_container:
         main_container["story"] = []
 
-    duplicate_found = any(
-        s.get("md5_hash") == story["md5_hash"]
-        for s in main_container["story"]
-    )
+    duplicate_report = linked_report or next((s for s in main_container["story"]
+        if s.get("md5_hash") == story["md5_hash"]), None)
+    data_id = ensure_data_id(select_data)
+    story["source_data_id"] = data_id
+    duplicate_found = duplicate_report is not None
+    if duplicate_found and not duplicate_report.get("source_data_id"):
+        duplicate_report["source_data_id"] = data_id
     if not duplicate_found:
         main_container["story"].append(story)
         if args.verbose:
@@ -197,13 +217,7 @@ def main():
         if args.verbose:
             print("Story already exists; not adding duplicate")
 
-    # Atomic write — concurrent st-gen --prep processes must not corrupt each other
-    tmp_json = file_json + ".tmp"
-    with open(tmp_json, 'w', encoding='utf-8') as f:
-        json.dump(main_container, f, ensure_ascii=False, indent=4)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp_json, file_json)  # atomic on POSIX
+    save_snapshot(file_json, main_container, file_fingerprint)
     if args.verbose:
         print(f"Story container updated: {file_json}")
 

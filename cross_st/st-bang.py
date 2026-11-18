@@ -13,6 +13,7 @@ st-bang --no-cache subject.prompt       # bypass API cache
 
 Options: --agent  --no-cache  --merge  -v  -q
 """
+from _report_store import load_snapshot, save_snapshot, ensure_data_id, link_new_report, same_generation
 import argparse
 import json
 import os
@@ -221,7 +222,8 @@ def main():
                         and d_make):
                     existing_makes.add(d_make)
         except (json.JSONDecodeError, Exception) as e:
-            print(f"Warning: could not read existing {file_json}: {e}")
+            print(f"Error: could not read existing {file_json}: {e}", file=sys.stderr)
+            sys.exit(1)
 
     # ── Build per-job metadata ────────────────────────────────────────────────
     ai_list = get_ai_list()
@@ -431,14 +433,14 @@ def main():
 
     # ── Merge available results into main .json ───────────────────────────────
     main_container = {"data": [], "story": []}
+    file_fingerprint = None
     data_md5_hash  = []
     story_md5_hash = []
 
     # Load existing container if present
     if os.path.isfile(file_json):
         try:
-            with open(file_json, 'r') as f:
-                main_container = json.load(f)
+            main_container, file_fingerprint = load_snapshot(file_json)
             # Ensure both keys exist even if the file is incomplete
             if "data" not in main_container:
                 main_container["data"] = []
@@ -451,7 +453,8 @@ def main():
             if args.verbose:
                 print(f"Loaded existing container: {file_json}")
         except (json.JSONDecodeError, Exception) as e:
-            print(f"Warning: could not read existing {file_json}: {e}")
+            print(f"Error: could not read existing {file_json}: {e}", file=sys.stderr)
+            sys.exit(1)
     else:
         if not args.quiet:
             print(f"Creating new container: {file_json}")
@@ -477,24 +480,32 @@ def main():
 
             # Don't replace a non-cached data entry with a cached one.
             # A cache hit has no useful timing; the existing non-cached entry
-            # already has the real elapsed time for this provider.
+            # already has the real elapsed time for this exact generation.
             is_cached_entry = data.get("timing", {}).get("cached", False)
-            non_cached_makes = {
-                d.get("make") for d in main_container["data"]
-                if not d.get("timing", {}).get("cached", False)
-            }
-            if is_cached_entry and data.get("make") in non_cached_makes:
+            selected_raw = None
+            retained = next((d for d in main_container["data"]
+                if not d.get("timing", {}).get("cached", False) and same_generation(d, data)), None)
+            if is_cached_entry and retained is not None:
+                selected_raw = retained
                 if args.verbose:
                     print(f"  Skipping cached entry for {data.get('make')} "
                           f"(non-cached entry already present)")
                 skipped += 1
             elif data["md5_hash"] not in data_md5_hash:
+                ensure_data_id(data)
                 main_container["data"].append(data)
+                selected_raw = data
                 data_md5_hash.append(data["md5_hash"])
             else:
                 skipped += 1
+                selected_raw = next(d for d in main_container["data"] if d.get("md5_hash") == data["md5_hash"])
 
-            if story["md5_hash"] not in story_md5_hash:
+            # Keep pair references valid when deduplication retained another raw
+            # copy. Timing-only deduplication retains the proven raw generation.
+            if selected_raw is not None:
+                story["source_data_id"] = ensure_data_id(selected_raw)
+            if selected_raw is not None and story["md5_hash"] not in story_md5_hash:
+                link_new_report(main_container, selected_raw, story)
                 main_container["story"].append(story)
                 story_md5_hash.append(story["md5_hash"])
             else:
@@ -508,8 +519,7 @@ def main():
             print(f"  Warning: could not save {single}: {e}")
 
     # Write merged output
-    with open(file_json, 'w', encoding='utf-8') as f:
-        json.dump(main_container, f, ensure_ascii=False, indent=4)
+    save_snapshot(file_json, main_container, file_fingerprint)
 
     if not args.quiet:
         print(f"  Saved {len(merged_files)} result(s)"

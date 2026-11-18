@@ -11,6 +11,8 @@ import json
 import os
 import sys
 import unittest
+import tempfile
+from unittest import mock
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -105,19 +107,15 @@ class ExplainLastErrorTests(unittest.TestCase):
         self.m.ai_handler.process_prompt = fake_process_prompt
         self.m.ai_handler.get_content_auto = lambda r: "explanation"
 
-        self.path = os.path.expanduser("~/.cross_api_cache/last_error.json")
-        os.makedirs(os.path.dirname(self.path), exist_ok=True)
-        self._backup = None
-        if os.path.exists(self.path):
-            with open(self.path) as f:
-                self._backup = f.read()
-
-    def tearDown(self):
-        if self._backup is not None:
-            with open(self.path, "w") as f:
-                f.write(self._backup)
-        elif os.path.exists(self.path):
-            os.remove(self.path)
+        # Never overwrite or delete the developer's real error breadcrumb.
+        directory = tempfile.TemporaryDirectory(prefix="cross-error-test-")
+        self.addCleanup(directory.cleanup)
+        self.path = str(Path(directory.name) / "last_error.json")
+        expanduser = os.path.expanduser
+        patch = mock.patch("os.path.expanduser", side_effect=lambda value:
+                           self.path if value == "~/.cross_api_cache/last_error.json" else expanduser(value))
+        patch.start()
+        self.addCleanup(patch.stop)
 
     def test_explain_last_error_scrubs_and_templates(self):
         with open(self.path, "w") as f:

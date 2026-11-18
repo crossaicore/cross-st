@@ -16,6 +16,7 @@ cross_st/st-admin.py     ← Settings manager: DEFAULT_AI, model overrides, TTS 
 cross_st/st-domain.py    ← Interactive wizard: create a new Cross-Stones domain prompt (Phases 2–4)
 cross_st/st-fetch.py     ← Import external content into a container (tweet_id / --file / --url / --clipboard)
 cross_st/st-find.py      ← Keyword search across .json containers and .prompt files; boolean operators (+required, ^excluded) + wildcards
+cross_st/st-update.py    ← Update an explicit source report; append or replace an existing output with --iterate, then review
 cross_st/st-fix.py       ← Improve a story via fact-check feedback (modes: iterate [default] / patch / best-source / synthesize)
 cross_st/st-merge.py     ← Synthesize multiple AI stories (auto: simple mode or quality mode using fact scores)
 cross_st/st-man.py       ← Man-page viewer: local help from docstrings + --web opens GitHub Wiki
@@ -83,6 +84,12 @@ Every story lives in a single `.json` container with two top-level arrays:
 - `data[]` — raw AI API responses written by `st-gen`; each entry includes a `timing{}` dict (`elapsed_seconds`, `tokens_input`, `tokens_output`, `tokens_total`, `tokens_per_second`, `cached`) and an `md5_hash` of the payload
 - `story[]` — processed output written by `st-prep`; includes `hashtags[]` extracted from the report
 - `fact[]` — appended by `st-fact`/`st-cross`; each entry: `{ make, model, score, counts, summary, report, claims[], timing{} }` where `claims[]` holds per-segment verdict details and `timing{}` is present on fresh (non-cached) runs
+
+### Report updates and raw associations
+
+`st-update -s N FILE.json` selects an existing source and appends an output. `--iterate N` replaces an existing update output and its raw entry after both replacements are prepared. With multiple reports, `-s` is required. No active report, revision graph, or version footer is used. CLI indices remain one-based array positions.
+
+`_report_store.py` owns raw `data_id` / prepared `source_data_id` links, conservative legacy resolution, shared locks, and atomic writes. Do not guess raw/report associations from array position or provider/model. `_report_update.py` prepares complete results before saving; `_report_content.py` handles in-place content edits and content-bound metadata. Report changes must not inherit stale checks or publication receipts. The canonical user explanation is `docs/wiki/st-update.md`; container fields are documented in `docs/wiki/Container-Format.md`.
 
 ## Adding a New AI Provider
 1. Work in the `cross-ai-core` repo (`~/github/cross-ai-core/`), not here

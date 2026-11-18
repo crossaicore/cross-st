@@ -18,6 +18,8 @@ import json
 import os
 import sys
 import time
+from copy import deepcopy
+from _report_store import load_snapshot, save_snapshot, link_new_report
 from mmd_startup import load_cross_env, require_config
 from pathlib import Path
 from statistics import mean, median, stdev
@@ -27,12 +29,12 @@ from tabulate import tabulate
 from ai_handler import process_prompt, get_content_auto, get_default_ai
 
 
-def load_container(file_path):
+def load_container(file_path, with_fingerprint=False):
     """Load a JSON container file."""
     try:
-        with open(file_path, 'r') as f:
-            return json.load(f)
-    except (OSError, json.JSONDecodeError) as e:
+        container, fingerprint = load_snapshot(file_path)
+        return (container, fingerprint) if with_fingerprint else container
+    except (OSError, ValueError) as e:
         print(f"Error loading {file_path}: {e}")
         return None
 
@@ -568,7 +570,7 @@ def validate_ai_content(content, content_type="caption"):
     return True, word_count, None
 
 
-def generate_ai_content(gen_summary, fact_summary, ai_make, content_type="caption", verbose=False, use_cache=True):
+def generate_ai_content(gen_summary, fact_summary, ai_make, content_type="caption", verbose=False, use_cache=True, generation_record=None):
     """
     Generate AI-written content for performance data.
     
@@ -598,6 +600,9 @@ def generate_ai_content(gen_summary, fact_summary, ai_make, content_type="captio
         # Call AI to generate content (uses existing ai_handler framework)
         result = process_prompt(ai_make, prompt, verbose=False, use_cache=use_cache)
         gen_payload, client, response, ai_model = result
+        if generation_record is not None:
+            generation_record.update(make=ai_make, model=ai_model, prompt=prompt,
+                                     gen_payload=gen_payload, gen_response=response)
         
         # Extract content text
         content = get_content_auto(response)
@@ -630,7 +635,8 @@ def generate_ai_content(gen_summary, fact_summary, ai_make, content_type="captio
         return ""
 
 
-def save_story_to_container(container, file_path, story_text, ai_make, ai_model, gen_summary, fact_summary):
+def save_story_to_container(container, file_path, story_text, ai_make, ai_model, gen_summary, fact_summary,
+                            raw_data=None, expected_fingerprint=None):
     """
     Save AI-generated story as a new entry in the JSON container.
     
@@ -649,6 +655,11 @@ def save_story_to_container(container, file_path, story_text, ai_make, ai_model,
     import time
     
     try:
+        if expected_fingerprint is None and Path(file_path).exists():
+            current, expected_fingerprint = load_snapshot(file_path)
+            if current != container:
+                raise ValueError("Container changed while generating the report; nothing saved.")
+        prepared = deepcopy(container)
         # Create story entry with Cross-compatible structure
         story_entry = {
             "make": ai_make,
@@ -669,15 +680,18 @@ def save_story_to_container(container, file_path, story_text, ai_make, ai_model,
         }
         
         # Add to container
-        if "story" not in container:
-            container["story"] = []
-        
-        container["story"].append(story_entry)
-        story_index = len(container["story"])
-        
-        # Save container
-        with open(file_path, 'w') as f:
-            json.dump(container, f, indent=2)
+        raw = deepcopy(raw_data) if raw_data is not None else {
+            "make": ai_make, "model": ai_model,
+            "prompt": build_ai_prompt(gen_summary, fact_summary, "story")}
+        raw["markdown"] = story_text
+        raw["_generated_by"] = "st-speed"
+        prepared.setdefault("data", []).append(raw)
+        link_new_report(prepared, raw, story_entry)
+        prepared.setdefault("story", []).append(story_entry)
+        story_index = len(prepared["story"])
+        save_snapshot(file_path, prepared, expected_fingerprint)
+        container.clear()
+        container.update(prepared)
         
         return story_index
         
@@ -859,9 +873,10 @@ def main():
     # Load container(s)
     containers = []
     for file_path in args.json_file:
-        container = load_container(file_path)
-        if container:
-            containers.append((file_path, container))
+        snapshot = load_container(file_path, with_fingerprint=True)
+        if snapshot:
+            container, fingerprint = snapshot
+            containers.append((file_path, container, fingerprint))
     
     if not containers:
         print("Error: No valid containers loaded")
@@ -871,7 +886,7 @@ def main():
     all_gen_data = []
     all_fact_data = []
     
-    for file_path, container in containers:
+    for file_path, container, fingerprint in containers:
         gen_data = extract_generation_timing(container)
         fact_data = extract_fact_check_timing(container)
         
@@ -917,21 +932,21 @@ def main():
                 
                 # Story type creates a new story in the JSON
                 if content_type == "story":
-                    print(f"\nGenerating {content_type} with {content_ai}...")
+                    print(f"\nGenerating {content_type} with {content_ai}...", flush=True)
                     if not use_cache:
                         print(f"  Cache disabled (--no-cache)")
-                    content = generate_ai_content(gen_summary_ai, fact_summary_ai, content_ai, content_type, args.verbose, use_cache)
+                    generation_record = {}
+                    content = generate_ai_content(gen_summary_ai, fact_summary_ai, content_ai, content_type, args.verbose, use_cache,
+                                                  generation_record=generation_record)
                     
                     if content:
-                        # Save story to container
-                        # Extract model from last AI call
-                        result = process_prompt(content_ai, "", verbose=False, use_cache=use_cache)
-                        _, _, _, ai_model = result
+                        ai_model = generation_record["model"]
                         
                         story_index = save_story_to_container(
                             container, file_path, content,
                             content_ai, ai_model,
-                            gen_summary_ai, fact_summary_ai
+                            gen_summary_ai, fact_summary_ai,
+                            raw_data=generation_record, expected_fingerprint=fingerprint
                         )
                         
                         if story_index > 0:

@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """
-## st-cat — Print story container fields to stdout
+## st-cat — Print report container fields to stdout
 
-Reads a single story (or fact-check) from a .json container and prints the
-requested field(s) to standard output.  Useful for piping story text into
+Reads a single report (or fact-check) from a .json container and prints the
+requested field(s) to standard output.  Useful for piping report text into
 other tools or shell scripts.
 
 ```
 st-cat subject.json                 # print the prompt (default)
-st-cat -t subject.json              # print title of story 1
-st-cat --markdown -s 3 subject.json # print markdown of story 3
-st-cat -f 2 -s 1 subject.json       # print fact-check report 2 from story 1
-st-cat --text -s 2 subject.json     # print plain text body of story 2
-st-cat --prompt subject.json        # print the original prompt text
+st-cat -t subject.json              # print title of report 1
+st-cat --markdown -s 3 subject.json # print markdown of report 3
+st-cat -f 2 -s 1 subject.json       # print fact-check report 2 from report 1
+st-cat --text -s 2 subject.json     # print plain text body of report 2
+st-cat --prompt subject.json        # print the selected report’s authored prompt
 ```
 
-Options: -s story  -f fact  --title  --text  --markdown  --hashtags  --spoken  --prompt
+Options: -s report  -f fact  --title  --text  --markdown  --hashtags  --spoken  --prompt
 """
 
 import argparse
@@ -33,21 +33,21 @@ def main():
     parser.add_argument('json_file', type=str,
                         help='Path to the JSON file', metavar='file.json')
     parser.add_argument('-s', '--story', type=int, default=1,
-                        help='Story number (integer), default: 1')
+                        help='Report number (integer), default: 1')
     parser.add_argument('-f', '--fact', type=int,
                         help='Fact-check report number (integer), default: none')
     parser.add_argument('--markdown', action='store_true',
-                        help='Story markdown, default: off')
+                        help='Report markdown, default: off')
     parser.add_argument('--hashtags', action='store_true',
-                        help='Story hashtags, default: off')
+                        help='Report hashtags, default: off')
     parser.add_argument('--spoken', action='store_true',
-                        help='Story spoken text, default: off')
+                        help='Report spoken text, default: off')
     parser.add_argument('--text', action='store_true',
-                        help='Story text body, default: off')
+                        help='Report text body, default: off')
     parser.add_argument('-t', '--title', action='store_true',
-                        help='Story title, default: off')
+                        help='Report title, default: off')
     parser.add_argument('--prompt', action='store_true',
-                        help='Print the original prompt text stored in the container (default if no other field specified)')
+                        help='Print the selected report’s authored prompt (default if no other field specified)')
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='Verbose output, default: off')
     parser.add_argument('-q', '--quiet', action='store_true',
@@ -84,11 +84,22 @@ def main():
     if args.verbose:
         print(f"Loaded: {file_json}", file=sys.stderr)
 
-    # --prompt is stored inside data[0], not at the top level
+    # Resolve the selected report’s authored request, including updated reports.
     if args.prompt:
         prompt_text = ""
         data = main_container.get("data", [])
-        if data:
+        reports = main_container.get("story", [])
+        if reports:
+            if not 1 <= args.story <= len(reports):
+                print(f"Report item out of range: {args.story}", file=sys.stderr)
+                sys.exit(1)
+            from _report_store import authored_prompt, StoreError
+            try:
+                prompt_text = authored_prompt(main_container, args.story - 1) or ""
+            except StoreError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                sys.exit(1)
+        elif data and args.story == 1:
             prompt_text = data[0].get("prompt", "")
         if prompt_text:
             print(prompt_text)
@@ -107,7 +118,7 @@ def main():
         select_story = main_container["story"][args.story - 1]
     else:
         if not args.quiet:
-            print(f"Story item out of range: {args.story}")
+            print(f"Report item out of range: {args.story}")
         sys.exit(1)
 
     if args.title:

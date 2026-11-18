@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+from _report_signals import report_author_key, report_labels_needed
+
 import json
 import pandas as pd
 import json
@@ -157,7 +159,7 @@ def get_flattened_fc_data_simple(data):
     # Requires N stories with exactly N facts each
     model_max_chars = 17
     flattened_data = []
-    for story in data["story"]:
+    for index, story in enumerate(data["story"]):
         evaluator_make = story["make"]
         evaluator_model = story["model"][:model_max_chars]
         for fact in story["fact"]:
@@ -167,7 +169,9 @@ def get_flattened_fc_data_simple(data):
             # add a 6th "unknown" bucket. Pad-on-read so downstream code can
             # always rely on an `unknown_count` column being present.
             _c = list(fact["counts"]) + [0]
+            identity = {"report_index": index + 1, "report_label": report_author_key(data, index)} if report_labels_needed(data) else {}
             flattened_data.append({
+                **identity,
                 "evaluator_make": evaluator_make,
                 "evaluator_model": evaluator_model,
                 "target_make": fact["make"],
@@ -179,7 +183,7 @@ def get_flattened_fc_data_simple(data):
                 "false_count": _c[4],
                 "unknown_count": _c[5],
                 "score": fact["score"],
-                "summary": fact["summary"]  # Optional, included for reference
+                "summary": fact.get("summary", "")  # Optional, included for reference
             })
     return flattened_data
 
@@ -213,6 +217,10 @@ Efficient: Prioritizes targets with higher coverage to maximize the chance of fi
     :param data:
     :return: square data set
     """
+    if report_labels_needed(data):
+        # Keep every selected output, including a sixth update from the same
+        # author; square reduction would silently drop or merge reports.
+        return get_flattened_fc_data_simple(data)
     model_max_chars = 17
     # Step 1: Collect all fact-check data and track targets per story
     story_data = []
@@ -307,8 +315,12 @@ def analysis_plots(df):
     df = df.drop(columns=["summary"])
 
     # Combine make and model for concise labels
-    df["evaluator"] = df["evaluator_make"] + ":" + df["evaluator_model"]
-    df["target"] = df["target_make"] + ":" + df["target_model"]
+    if "report_label" in df:
+        df["target"] = df["report_label"]
+        df["evaluator"] = df["target_make"] + ":" + df["target_model"]
+    else:
+        df["evaluator"] = df["evaluator_make"] + ":" + df["evaluator_model"]
+        df["target"] = df["target_make"] + ":" + df["target_model"]
 
     # --- 1. Statistical Summary ---
     print("Statistical Summary of Scores and Counts:")

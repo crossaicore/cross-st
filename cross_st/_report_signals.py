@@ -289,8 +289,8 @@ _COUNTS_LEN = 6
 class AuthorScore:
     """Per-author composite score + component breakdown + exclusion reason.
 
-    `author` is the canonical `make:model` identity used everywhere in the
-    new scoring pipeline. `composite` is in roughly [-1, +1]; sub-scores are
+    `author` is the display key: `make:model`, with `[S#]` when needed
+    to distinguish physical report entries. Provider/model fields stay unchanged. `composite` is in roughly [-1, +1]; sub-scores are
     in [0, 1] except `accuracy` which is in [-1, +1].
 
     `excluded` authors are still returned (so the chart can show them with a
@@ -310,6 +310,7 @@ class AuthorScore:
     excluded: bool
     excluded_reason: str | None
     narrative: str
+    report_index: int | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -317,6 +318,46 @@ class AuthorScore:
 
 def _author_id(make: str, model: str) -> str:
     return f"{(make or '?').strip()}:{(model or '?').strip()}"
+
+
+def report_labels_needed(container):
+    """Use physical report labels when updates or repeated authors need distinction."""
+    authors = [_author_id(r.get("make"), r.get("model")) for r in container.get("story", [])]
+    from _report_store import has_updates
+    return len(authors) != len(set(authors)) or has_updates(container)
+
+
+def report_author_key(container, index):
+    """An author label with a current one-based report position when needed."""
+    report = container["story"][index]
+    author = _author_id(report.get("make"), report.get("model"))
+    return f"{author} [S{index + 1}]" if report_labels_needed(container) else author
+
+
+def report_prompt_text(container, index):
+    """Resolve this report's authored intent without replaying assembled requests."""
+    report = container["story"][index]
+    prompt = report.get("authored_prompt")
+    if isinstance(prompt, str):
+        return prompt
+    from _report_store import authored_prompt, has_updates
+    resolved = authored_prompt(container, index)
+    if resolved is not None:
+        return resolved
+    # Retain established evaluation of older multi-candidate containers; an
+    # update container with an ambiguous association must not borrow report 1.
+    return "" if has_updates(container) else get_prompt_text(container)
+
+
+def report_prompt_signals(container, index):
+    report = container["story"][index]
+    current = parse_prompt(report_prompt_text(container, index))
+    base = parse_prompt(report.get("base_prompt", ""))
+    # A current length requirement overrides its earlier baseline. Subjects from
+    # both explain the update's purpose without promoting evidence to instructions.
+    length = current if current.target_words is not None else base
+    return PromptSignals(length.target_words, length.target_lo, length.target_hi,
+                         current.subjects | base.subjects)
 
 
 def _word_count(story: dict) -> int:
@@ -454,12 +495,15 @@ def _collect_author_signals(container: dict) -> list:
     out = []
     data_authors = {_author_id(d.get("make", ""), d.get("model", ""))
                     for d in container.get("data", []) if isinstance(d, dict)}
-    for story in container.get("story", []):
+    for index, story in enumerate(container.get("story", [])):
         if not isinstance(story, dict):
             continue
         make = story.get("make", "?")
         model = story.get("model", "?")
-        author = _author_id(make, model)
+        author = report_author_key(container, index)
+        raw_author = _author_id(make, model)
+        associated = any(d.get("data_id") == story.get("source_data_id")
+                         for d in container.get("data", []) if story.get("source_data_id"))
         per_eval = []
         truncated_any = False
         for fact in story.get("fact", []):
@@ -472,7 +516,9 @@ def _collect_author_signals(container: dict) -> list:
             "author": author,
             "make": make,
             "model": model,
-            "in_data": author in data_authors,
+            "in_data": associated or raw_author in data_authors,
+            "report_index": index + 1,
+            "prompt_signals": report_prompt_signals(container, index),
             "words": _word_count(story),
             "segments": _segment_count(story),
             "per_eval_counts": per_eval,
@@ -506,16 +552,13 @@ def score_authors(container: dict, weights=None) -> list:
     Returns a list of AuthorScore, sorted by composite descending. Excluded
     authors are appended after all included authors and have rank=None.
 
-    Identity is `make:model` (never `make` alone), so the scorer is
-    forward-compatible with multi-model-per-make in cross-ai-core.
+    Each physical report is scored separately. Display labels include its
+    current position when updates or repeated authors need distinction.
     """
     w = _resolve_weights(weights)
     signals = _collect_author_signals(container)
     if not signals:
         return []
-
-    prompt_text = get_prompt_text(container)
-    psig = parse_prompt(prompt_text)
 
     # Cohort medians — computed across ALL signals (incl. would-be excluded)
     # so a single tiny outlier doesn't pull the median down and accidentally
@@ -551,6 +594,7 @@ def score_authors(container: dict, weights=None) -> list:
 
     results = []
     for s, total_claims in zip(signals, claim_totals):
+        psig = s["prompt_signals"]
         # ---- exclusion gate ----
         reasons = []
         if not s["in_data"]:
@@ -597,6 +641,7 @@ def score_authors(container: dict, weights=None) -> list:
 
         results.append(AuthorScore(
             author=s["author"],
+            report_index=s["report_index"],
             make=s["make"],
             model=s["model"],
             rank=None,

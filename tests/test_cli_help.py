@@ -60,6 +60,7 @@ _COMMANDS = [
     "st-cross",
     "st-domain",
     "st-edit",
+    "st-update",
     "st-fact",
     "st-fetch",
     "st-find",

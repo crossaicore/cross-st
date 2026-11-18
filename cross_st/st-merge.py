@@ -40,6 +40,7 @@ Output:
 See README_merge.md for the full design notes and roadmap.
 """
 
+from _report_store import load_snapshot, save_snapshot, ensure_data_id, link_new_report
 import argparse
 import hashlib
 import json
@@ -576,8 +577,7 @@ def main():
         if not os.path.isfile(file_json):
             print(f"Error: The file {args.json_file} does not exist.")
             sys.exit(1)
-        with open(file_json, 'r') as file:
-            main_container = json.load(file)
+        main_container, file_fingerprint = load_snapshot(file_json)
     except json.JSONDecodeError:
         print(f"Error: The file {file_json} contains invalid JSON.")
         sys.exit(1)
@@ -787,7 +787,12 @@ def main():
         if not args.quiet:
             print("  Duplicate data item — not added")
 
-    # ── Build story entry ─────────────────────────────────────────────────────
+    selected_raw = main_container["data"][duplicate_index - 1] if duplicate_index is not None else data
+    if not selected_raw.get("data_id"):
+        container_modified = True
+    source_data_id = ensure_data_id(selected_raw)
+
+    # ── Build report entry ────────────────────────────────────────────────────
     all_raw_story_text = get_content_auto(response)
     make = args.agent
     model = get_ai_model(make)
@@ -823,6 +828,7 @@ def main():
     md5_hash = hashlib.md5(story_str.encode('utf-8')).hexdigest()
     story["md5_hash"] = md5_hash
 
+    story["source_data_id"] = source_data_id
     if "story" not in main_container:
         main_container["story"] = []
 
@@ -833,20 +839,21 @@ def main():
             duplicate_index = index
             break
     if duplicate_index is None:
+        link_new_report(main_container, selected_raw, story)
         main_container["story"].append(story)
         container_modified = True
         story_num = len(main_container["story"])
         if not args.quiet:
             print(f"  Added merged story as story {story_num}  (mode: {mode})")
     else:
+        if not main_container["story"][duplicate_index - 1].get("source_data_id"):
+            link_new_report(main_container, selected_raw, main_container["story"][duplicate_index - 1])
+            container_modified = True
         if not args.quiet:
             print("  Merged story already exists — not adding duplicate")
 
     if container_modified:
-        with open(file_json, 'w', encoding='utf-8') as f:
-            json.dump(main_container, f, ensure_ascii=False, indent=4)
-            f.flush()
-            os.fsync(f.fileno())
+        save_snapshot(file_json, main_container, file_fingerprint)
         if not args.quiet:
             print(f"  Container updated: {file_json}")
 

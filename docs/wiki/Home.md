@@ -28,6 +28,7 @@ New user? Start here: **[Onboarding](Onboarding)** — set up your API keys and 
 | [st-fact](st-fact) | Fact-check one story with one AI |
 | [st-fetch](st-fetch) | Import external content (URL, tweet, clipboard, file) |
 | [st-find](st-find) | Search across story containers and prompt files |
+| [st-update](st-update) | Update a saved report and review the generated changes |
 | [st-fix](st-fix) | Improve a story using fact-check feedback |
 | [st-gen](st-gen) | Generate a single AI report |
 | [st-heatmap](st-heatmap) | Cross-product fact-check score heatmap |

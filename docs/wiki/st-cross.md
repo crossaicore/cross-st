@@ -1,6 +1,6 @@
-# st-cross — Run all AI providers and cross-check results
+# st-cross — Generate reports and cross-check every saved report
 
-Runs the full research pipeline in one command: generates a report from every AI provider, then has every AI fact-check every report. The result is an N×N score matrix saved into the container.
+Runs the full research pipeline in one command: generates reports when needed, then has every configured checking agent fact-check every saved report. The result is a reports × agents matrix saved into the container. An initial run with five agents produces a 5×5 matrix; adding an updated report makes it 6×5.
 
 ![st-cross pipeline — tool associations](st-cross-pipeline.svg)
 
@@ -11,14 +11,14 @@ Runs the full research pipeline in one command: generates a report from every AI
 
 **Related:** [st-bang](st-bang)  [st-fact](st-fact)  [st-heatmap](st-heatmap)  [st-verdict](st-verdict)  [Multi-Model](Multi-Model)  [Ollama](Ollama)
 
-> **Multi-model (0.9.0+):** `--agent` accepts agents defined in `~/.cross_ai_models.json` — e.g. `--agent anthropic-opus` runs Opus alongside the bare `--agent anthropic` default. Same-make agents share one rate-limit semaphore. See [Multi-Model](Multi-Model).
+> **Multiple models:** Checking columns come from configured [agents](Agents), including multiple models from one provider. `st-cross` uses all available checking agents; use `st-fact --agent NAME` to choose one checker. Same-provider agents share one rate-limit semaphore. See [Multi-Model](Multi-Model).
 
 ---
 
 ## Examples
 
 ```bash
-st-cross subject.json                   # full N×N run: generate + fact-check all AIs
+st-cross subject.json                   # generate when needed + check every saved report
 st-cross --no-cache subject.json        # bypass cache (no read, no write); does NOT force a re-run on a complete container
 st-cross --force subject.json           # clear all existing fact[] entries and re-run every cell — use after a prompt change
 st-cross --skip-gen subject.json        # skip generation — only run fact-checking
@@ -37,7 +37,7 @@ st-cross -q subject.json                # minimal output (suppress live table)
 | `--cache` | Enable API cache (default: enabled) |
 | `--no-cache` | Disable API cache (no read, no write). Does **not** by itself force a re-fact-check on an already-complete container — see `--force`. |
 | `--force` | Bypass resume detection AND clear all existing `fact[]` entries before launching, then re-run every cell. Implies `--no-cache`. Use after changing the fact-check prompt or when you want fresh verdicts. |
-| `--skip-gen` | Skip Step 1 (story generation). Auto-detected if all stories already exist. |
+| `--skip-gen` | Skip report generation. Auto-detected when a report already exists for each generation agent. |
 | `--dry-run` | Preview the Step 2 matrix (pending vs complete cells) and exit without running anything. Implies `--skip-gen`. |
 | `--timeout SECONDS` | Per-cell wall-clock timeout (default: 1800 = 30 min). `0` = no timeout. |
 | `-p`, `--parallel` | Run cells in parallel, gated by per-provider rate-limit semaphores (default). |
@@ -46,6 +46,14 @@ st-cross -q subject.json                # minimal output (suppress live table)
 | `--retry-budget SECONDS` | Per-segment retry budget passed to `st-fact` (default: 45). `0` = unlimited. |
 | `-v`, `--verbose` | Verbose output |
 | `-q`, `--quiet` | Suppress live table (minimal output) |
+
+## Existing containers and update outputs
+
+Each saved report is a separate matrix row, identified by its current report index. Reports from the same agent or model remain separate. Columns are the configured checking agents; the number of rows need not equal the number of columns.
+
+For example, after five initial reports have all been checked, `st-update -s 2 subject.json` appends report 6 with no inherited checks. The next `st-cross subject.json` resumes the existing 25 completed cells and checks report 6 with all five agents. It does not select a single newest or active report. `--skip-gen` explicitly suppresses generation when you only want checks on the reports already saved.
+
+`--dry-run` previews this full matrix without changing an existing container, including when combined with `--force`. A real `--force` clears checks on every report and reruns every cell. For one report and one chosen checker, use `st-fact -s 6 --agent NAME subject.json` instead.
 
 ## `--timeout` vs `--retry-budget`
 
@@ -60,4 +68,4 @@ The two flags operate at **different scopes** and are independent — you almost
 
 ## For developers
 
-Step 1 runs `st-gen --bang` per AI in parallel processes, each writing to its own `_N.json` file so there are no shared-file races. After all jobs finish, st-cross merges them into the main container and runs `st-prep` sequentially to build the `story[]` array. Step 2 launches one daemon thread per cell (N×N total), each calling `st-fact` as a subprocess for crash isolation. A per-provider `threading.Semaphore` (sized by `cross_ai_core.get_rate_limit_concurrency()`) gates how many cells for a given fact-checker AI can be in flight at once — this is what prevents parallel runs from tripping provider rate limits. `--sequential` collapses every provider onto a single `Semaphore(1)`. The live ANSI display is updated every second; Ctrl+C cancels remaining cells while preserving the results collected so far.
+Step 1 runs `st-gen --bang` per agent in parallel processes, each writing to its own `_N.json` file so there are no shared-file races. After all jobs finish, st-cross merges them into the main container and runs `st-prep` sequentially to build the `story[]` array. Step 2 launches one daemon thread per pending report/checker cell, each calling `st-fact` with the physical report index as a subprocess for crash isolation. A per-provider `threading.Semaphore` (sized by `cross_ai_core.get_rate_limit_concurrency()`) gates how many cells for a given checker can be in flight at once. `--sequential` collapses every provider onto a single `Semaphore(1)`. The live ANSI display is updated every second; Ctrl+C cancels remaining cells while preserving the results collected so far.

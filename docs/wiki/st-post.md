@@ -29,7 +29,7 @@ st-post --check                                           # verify credentials w
 | `-s N`, `--story N` | Story to publish (1-based index, default: 1) |
 | `-f N`, `--fact N` | Reply to the post with fact-check N |
 | `--category VALUE` | Where to post — accepts `private`, a numeric category ID, or (on crossai.dev only) `test` / `reports` / `prompt-lab`. Default: `test`. See below. |
-| `--prompt` | Post the prompt text from the container instead of the story (use with `--category prompt-lab`) |
+| `--prompt` | Post the selected report’s authored prompt instead of its body (use with `--category prompt-lab`) |
 | `--check` | Validate Discourse credentials and connection without posting |
 | `-v`, `--verbose` | Verbose output |
 | `-q`, `--quiet` | Minimal output |
@@ -75,3 +75,9 @@ Once you know the ID, you can either:
 ## For developers
 
 Site credentials are read from the `DISCOURSE` JSON in `~/.crossenv`. If an `.mp3` file is provided, it is uploaded first and the Discourse audio-player embed syntax is prepended to the post. `--category` resolution is centralised in `discourse.resolve_category(site, name_or_id)`: numeric IDs pass through, `private` resolves to `site["private_category_id"]`, and the crossai.dev shortcuts (`test`/`reports`/`prompt-lab` → 6/16/17) are gated on `crossai.dev` appearing in `site["url"]`. The shortcut table lives in `cross_st/discourse.py` as `CROSSAI_NAMED_CATEGORIES`.
+
+## Posting updated reports
+
+Use the output index explicitly, for example `st-post -s 2 report.json`. Ordinary JSON posting reads that report’s saved Markdown and title. Explicit `.md`/`.title` arguments remain deliberate overrides. Supply the exact existing MP3 filename when attaching audio; an update does not regenerate exports automatically.
+
+Posting creates a separate remote copy. Local edits, iteration, or deletion do not update that copy. Known duplicate titles on the same site are rejected; choose a distinct title to publish a new output. Local publication receipts retain the known remote title/URL even if a report is subsequently changed or removed. A successful remote post is recorded without overwriting concurrent local report edits.

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-## st-rm — Remove items from a story container
+## st-rm — Remove reports and their associated raw data
 
-Deletes data items, stories, or fact-check reports from a .json container.
-Supports bulk-clearing all fact-checks and claim segments from one story or
-every story in the container.
+Deletes complete report/raw pairs or fact-check records from a .json container.
+Supports bulk-clearing all fact-checks and claim segments from one report or
+every report in the container. Removing a report compacts subsequent indices.
 
 ```
 st-rm -s 3 subject.json              # remove story 3
@@ -19,6 +19,7 @@ All index arguments are 1-based, matching the output of st-ls.
 Options: -d data  -s story  -f fact  -F clear-facts  --all-stories  -v  -q
 """
 
+from _report_store import load_snapshot, save_snapshot, remove_pair, raw_index, StoreError
 import argparse
 import json
 import os
@@ -30,13 +31,13 @@ def main():
     require_config()
     parser = argparse.ArgumentParser(
         prog='st-rm',
-        description='Remove items from a story container')
+        description='Remove reports with their raw data, or remove individual checks')
     parser.add_argument('json_file', type=str,
                         help='Path to the JSON file', metavar='file.json')
     parser.add_argument('-d', '--data', type=int,
                         help='Remove a data item (integer index)')
     parser.add_argument('-s', '--story', type=int,
-                        help='Remove a story (integer index)')
+                        help='Remove a report and its associated raw data (integer index)')
     parser.add_argument('-f', '--fact', type=int,
                         help='Remove a fact-check report from a story (integer index)')
     parser.add_argument('-F', '--clear-facts', action='store_true',
@@ -49,6 +50,8 @@ def main():
                         help='Enable minimal output')
 
     args = parser.parse_args()
+    if args.data is not None and (args.story is not None or args.fact is not None or args.clear_facts):
+        parser.error("--data cannot be combined with report or fact removal")
 
     # Warn early if no action was requested
     action_requested = any([
@@ -69,8 +72,7 @@ def main():
             print(f"Error: The file {args.json_file} does not exist.")
             sys.exit(1)
 
-        with open(file_json, 'r') as file:
-            main_container = json.load(file)
+        main_container, file_fingerprint = load_snapshot(file_json)
 
     except json.JSONDecodeError:
         print(f"Error: The file {file_json} contains invalid JSON.")
@@ -86,8 +88,10 @@ def main():
         else:
             length = len(main_container["data"])
             if 1 <= args.data <= length:
-                rm_item = main_container["data"][args.data - 1]
-                main_container["data"].remove(rm_item)
+                if any(raw_index(main_container, i) == args.data - 1 for i in range(len(main_container.get("story", [])))):
+                    print("This raw entry belongs to a report. Remove the complete pair with st-rm -s N.", file=sys.stderr)
+                    sys.exit(1)
+                del main_container["data"][args.data - 1]
                 if not args.quiet:
                     print(f"Data item {args.data} removed")
                 main_container_updated = True
@@ -102,8 +106,11 @@ def main():
         else:
             length = len(main_container["story"])
             if 1 <= args.story <= length:
-                rm_item = main_container["story"][args.story - 1]
-                main_container["story"].remove(rm_item)
+                try:
+                    main_container = remove_pair(main_container, args.story - 1)
+                except StoreError as exc:
+                    print(f"Error: {exc}", file=sys.stderr)
+                    sys.exit(1)
                 if not args.quiet:
                     print(f"Story {args.story} removed")
                 main_container_updated = True
@@ -166,8 +173,11 @@ def main():
             sys.exit(1)
 
     if main_container_updated:
-        with open(file_json, 'w', encoding='utf-8') as f:
-            json.dump(main_container, f, ensure_ascii=False, indent=4)
+        try:
+            save_snapshot(file_json, main_container, file_fingerprint)
+        except (ValueError, OSError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            sys.exit(1)
         if not args.quiet:
             print(f"Container updated: {file_json}")
 

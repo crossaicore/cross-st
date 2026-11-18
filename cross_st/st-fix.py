@@ -201,6 +201,7 @@ Usage:
   st-fix -s 1 -f 1 --mode best-source file.json       # use other AI stories as reference
   st-fix --mode synthesize file.json                   # full synthesis across all stories
 """
+from _report_store import load_snapshot, save_snapshot, ensure_data_id, link_new_report
 import argparse
 import hashlib
 import json
@@ -1125,6 +1126,11 @@ def _save_result(container, file_json, args,
     Falls back to args.agent if _make is absent (e.g. old containers or empty responses).
     """
     container_modified = False
+    file_fingerprint = getattr(args, "_container_fingerprint", None)
+    if file_fingerprint is None and os.path.exists(file_json):
+        disk_container, file_fingerprint = load_snapshot(file_json)
+        if disk_container != container:
+            raise ValueError("Container changed before saving the fixed report; nothing saved.")
 
     # ── Resolve the AI that produced gen_response ─────────────────────────────
     # gen_response["_make"] is stamped by process_prompt() for all fresh calls.
@@ -1167,7 +1173,13 @@ def _save_result(container, file_json, args,
         data_index = len(container["data"])
         container_modified = True
 
-    # ── Story entry ───────────────────────────────────────────────────────────
+    selected_raw = container["data"][data_index - 1]
+    if not selected_raw.get("data_id"):
+        container_modified = True
+    source_data_id = ensure_data_id(selected_raw)
+    # ── Report entry ──────────────────────────────────────────────────────────
+    from mmd_for_speaking import for_speaking
+    from mmd_process_report import get_hashtags
     story = {
         "make":     story_make,
         "model":    story_model,
@@ -1176,8 +1188,8 @@ def _save_result(container, file_json, args,
         "title":    original_story.get("title", ""),
         "markdown": revised_text,
         "text":     remove_markdown(revised_text),
-        "spoken":   original_story.get("spoken", ""),
-        "hashtags": original_story.get("hashtags", []),
+        "spoken":   for_speaking(remove_markdown(revised_text), False),
+        "hashtags": get_hashtags(revised_text),
         "fact":     [],
         # Provenance stamp — auto-selector excludes prior st-fix outputs by default.
         # Underscore-prefixed to match _timestamp / _make convention. Old containers
@@ -1194,10 +1206,12 @@ def _save_result(container, file_json, args,
     story_str = json.dumps(story, sort_keys=True)
     story["md5_hash"] = hashlib.md5(story_str.encode()).hexdigest()
 
+    story["source_data_id"] = source_data_id
     dup_story = next((i + 1 for i, s in enumerate(container.get("story", []))
                       if s.get("md5_hash") == story["md5_hash"]), None)
     story_index = dup_story
     if dup_story is None:
+        data_index = link_new_report(container, selected_raw, story) + 1
         container.setdefault("story", []).append(story)
         story_index = len(container["story"])
         container_modified = True
@@ -1205,14 +1219,14 @@ def _save_result(container, file_json, args,
             print(f"  Added fixed story as story {story_index}  "
                   f"(make: {story_make}, mode: {args.mode})")
     else:
+        if not container["story"][dup_story - 1].get("source_data_id"):
+            link_new_report(container, selected_raw, container["story"][dup_story - 1])
+            container_modified = True
         if not args.quiet:
             print(f"  Identical result already exists as story {story_index} — no change.")
 
     if container_modified:
-        with open(file_json, 'w', encoding='utf-8') as f:
-            json.dump(container, f, ensure_ascii=False, indent=4)
-            f.flush()
-            os.fsync(f.fileno())
+        save_snapshot(file_json, container, file_fingerprint)
         if not args.quiet:
             print(f"  Container updated: {file_json}")
         if args.prep and data_index:
@@ -1293,8 +1307,7 @@ Modes:
         if not os.path.isfile(file_json):
             print(f"Error: {file_json} does not exist.")
             sys.exit(1)
-        with open(file_json, 'r') as f:
-            container = json.load(f)
+        container, args._container_fingerprint = load_snapshot(file_json)
     except json.JSONDecodeError:
         print(f"Error: {file_json} contains invalid JSON.")
         sys.exit(1)

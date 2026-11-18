@@ -9,6 +9,25 @@ Cross uses Calendar Versioning (`YYYY.M.R`).
 
 ## [Unreleased]
 
+### Added
+- `st-update` generates an updated report from saved Markdown, an authored request,
+  and optional local evidence. Append a new output or replace an existing update
+  with `--iterate N`; review actual changes with concise or detailed summaries.
+- `st-update --show-summary` reads a saved change summary without another AI call.
+- Three worked update examples covering human edits, new observations, and selected feedback.
+
+### Changed
+- Report scoring, chart labels, and listings keep separate outputs from the same
+  provider/model distinct and use each report's authored requirements.
+- Raw-generation IDs explicitly associate prepared reports with their source
+  records so updates and removals can operate on complete pairs.
+- `st-cross` checks every saved report against configured agents, including
+  additional same-agent updates; resume and force support rectangular matrices.
+- Manual edits remain in place and invalidate stale checks/exports. Check and
+  publication saves reject attachment to changed content; remote receipts remain
+  independent of local replacement or removal.
+- `st-man` discovers all installed commands, including `st-update`.
+
 ---
 
 ## [2026.10.0] — 2026-10-13

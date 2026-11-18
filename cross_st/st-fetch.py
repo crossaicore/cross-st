@@ -44,6 +44,7 @@ PDF import uses pymupdf4llm (lazy import — only required when fetching PDFs):
   pipx inject cross-st pymupdf4llm # pipx install
 """
 
+from _report_store import load_snapshot, save_snapshot, ensure_data_id
 import argparse
 import hashlib
 import json
@@ -402,8 +403,7 @@ def main():
     container_modified = False
     if os.path.isfile(file_json):
         try:
-            with open(file_json, 'r') as f:
-                container = json.load(f)
+            container, file_fingerprint = load_snapshot(file_json)
         except json.JSONDecodeError:
             print(f"Error: {file_json} contains invalid JSON.")
             sys.exit(1)
@@ -412,6 +412,7 @@ def main():
             sys.exit(1)
     else:
         container = {"data": [], "story": []}
+        file_fingerprint = None
         if not args.quiet:
             print(f"  Creating new container: {file_json}")
 
@@ -442,6 +443,7 @@ def main():
         None
     )
     if duplicate is None:
+        ensure_data_id(data)
         container.setdefault("data", []).append(data)
         container_modified = True
         data_index = len(container["data"])
@@ -454,10 +456,7 @@ def main():
 
     # ── Save container ────────────────────────────────────────────────────────
     if container_modified:
-        with open(file_json, 'w', encoding='utf-8') as f:
-            json.dump(container, f, ensure_ascii=False, indent=4)
-            f.flush()
-            os.fsync(f.fileno())
+        save_snapshot(file_json, container, file_fingerprint)
         if not args.quiet:
             print(f"  Container updated: {file_json}")
 

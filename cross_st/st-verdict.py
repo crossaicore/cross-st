@@ -54,6 +54,20 @@ import _markdown
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def _chart_frame(flattened):
+    """Label repeated authors by their current report positions."""
+    frame = pd.DataFrame(flattened)
+    if "report_label" in frame:
+        # Preserve legacy field names while displaying checker/report axes.
+        frame["target"] = frame["report_label"]
+        frame["evaluator"] = frame["target_make"] + ":" + frame["target_model"]
+        frame.attrs["report_identity"] = True
+    else:
+        frame["evaluator"] = frame["evaluator_make"] + ":" + frame["evaluator_model"]
+        frame["target"] = frame["target_make"] + ":" + frame["target_model"]
+    return frame
+
+
 def valid_directory(path_str):
     """Validate or create the output directory; return path with trailing separator."""
     path = Path(path_str).resolve()
@@ -68,11 +82,12 @@ def valid_directory(path_str):
 def extract_story_titles(container):
     """Return a compact make/model: title list from the container."""
     lines = []
-    for s in container.get("story", []):
+    for index, s in enumerate(container.get("story", [])):
         make  = s.get("make",  "?")
         model = s.get("model", "?")
         title = s.get("title", "")[:90]
-        lines.append(f"  {make}/{model}: {title}")
+        from _report_signals import report_author_key
+        lines.append(f"  {report_author_key(container, index)}: {title}")
     return "\n".join(lines)
 
 
@@ -160,7 +175,7 @@ def format_authors_for_prompt(container, weights=None):
             evaluator_set.add(f"{ev_make}:{ev_model}")
     evaluators_sorted = sorted(evaluator_set)
 
-    author_ids = {s.author for s in scores}
+    author_ids = {f"{s.make}:{s.model}" for s in scores}
     # Evaluators that are ALSO authors (they evaluated themselves and others)
     # vs. evaluators that NEVER authored — the latter are the dangerous ones
     # (gemini in the figma fixture). Call out non-author evaluators by name.
@@ -872,11 +887,15 @@ _VERDICT_COLORS     = ["#2ecc71", "#a8d8a8", "#f0e68c", "#f4a460", "#e74c3c", "#
 
 def _short_label(target_str):
     """Convert 'make:model_long_name' to a two-line axis label."""
+    identity = ""
+    if " [S" in target_str and target_str.endswith("]"):
+        target_str, identity = target_str.rsplit(" [", 1)
+        identity = "\n[" + identity
     parts = target_str.split(":", 1)
     if len(parts) == 2:
         make, model = parts
-        return f"{make}\n{model[:15]}"
-    return target_str[:20]
+        return f"{make}\n{model[:15]}{identity}"
+    return target_str[:20] + identity
 
 
 def render_verdict_bar(df, output_path, display, file_out, quiet, subject="",
@@ -1148,12 +1167,10 @@ def main():
         print(f"Run st-fact or st-cross to fact-check the stories first.")
         sys.exit(1)
 
-    df = pd.DataFrame(flattened)
+    df = _chart_frame(flattened)
     if "summary" in df.columns:
         df = df.drop(columns=["summary"])
 
-    df["evaluator"] = df["evaluator_make"] + ":" + df["evaluator_model"]
-    df["target"]    = df["target_make"]    + ":" + df["target_model"]
 
     if args.verbose:
         print(f"Loaded {len(df)} fact-check entries from {file_json}")
@@ -1177,13 +1194,15 @@ def main():
             _included = [s for s in _scores if not s.excluded]
             if _included:
                 top = _included[0]
-                for _idx, _story in enumerate(stories, start=1):
-                    if not isinstance(_story, dict):
-                        continue
-                    _aid = f"{(_story.get('make') or '?').strip()}:{(_story.get('model') or '?').strip()}"
-                    if _aid == top.author:
-                        winner_story = _idx
-                        break
+                winner_story = getattr(top, "report_index", None)
+                if winner_story is None:
+                    for _idx, _story in enumerate(stories, start=1):
+                        if not isinstance(_story, dict):
+                            continue
+                        _aid = f"{(_story.get('make') or '?').strip()}:{(_story.get('model') or '?').strip()}"
+                        if _aid == top.author:
+                            winner_story = _idx
+                            break
                 if winner_story is not None:
                     args.story = winner_story
                     if not args.quiet:
@@ -1197,7 +1216,8 @@ def main():
                           f"(no scoring winner could be resolved). "
                           f"Override with -s N.", flush=True)
         lens_claims = collect_lens_claims(container, args.story, lens)
-        prompt_text = get_prompt_text(container)
+        from _report_signals import report_prompt_text
+        prompt_text = report_prompt_text(container, args.story - 1)
         if lens in ("missing", "howtofix"):
             report_text = collect_lens_report(container, args.story)
         if lens == "howtofix":

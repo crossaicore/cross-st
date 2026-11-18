@@ -19,6 +19,8 @@ import subprocess
 import sys
 import threading
 import time
+from _report_store import load_snapshot, save_snapshot, ensure_data_id, link_new_report
+from _report_signals import report_prompt_text
 from mmd_startup import require_config, load_cross_env
 import pandas as pd
 from ai_handler import process_prompt, get_ai_list, get_content_auto, get_ai_model, \
@@ -108,13 +110,13 @@ Close with one practical implication for choosing an AI in this domain.
 Make reference to 'The Heatmap in Figure 1' as necessary.
 Throughout the report, when referencing data, please round the data to 1 decimal place.
 
-4. Insert the AI prompt used to generate the reports. 
-Use a heading ## 4. AI Prompt Used to Generate Each Report
-Paste into report using markdown '> ' for each line. 
-> {prompt_from_file}
-The caption under the table reads something like: 
-"This prompt was used for each AI under study"
-Provide some pithy insights into the caption if you like.
+4. Present the authored requirements for each report, preserving its S index.
+Use a heading ## 4. Authored Requirements by Report
+These requirements may differ between original reports and updated outputs.
+Do not claim that one prompt was used for every report. Missing prompts are
+unknown, and report indices identify separate outputs even from the same model.
+Quote the following requirements without combining them:
+{prompt_from_file}
 
 5. Insert a table of Report Titles, 
 Use a heading ## 5. Table of Report Titles
@@ -302,8 +304,7 @@ def main():
             print(f"Error: The file {args.json_file} does not exist.")
             sys.exit(1)
 
-        with open(file_json, 'r') as file:
-            main_container = json.load(file)
+        main_container, file_fingerprint = load_snapshot(file_json)
 
     except json.JSONDecodeError:
         print(f"Error: The file {file_json} contains invalid JSON.")
@@ -312,13 +313,12 @@ def main():
         print(f"An unexpected error occurred: {e}")
         sys.exit(1)
 
-    if not os.path.isfile(file_prompt):
-        print(f"Error: The file {file_prompt} does not exist.")
-        sys.exit(1)
-    with open(file_prompt, 'r') as infile:
-        prompt_from_file = infile.read()
+    prompt_from_file = "\n\n".join(
+        f"### S{index + 1}: {report.get('title', 'Untitled report')}\n"
+        + (report_prompt_text(main_container, index) or "Authored requirements unavailable.")
+        for index, report in enumerate(main_container.get("story", [])))
 
-    cmd = f"st-ls -s --clip 100 {file_json}".split()
+    cmd = ["st-ls", "-s", "--clip", "100", file_json]
     result = subprocess.run(
         cmd,
         capture_output=True,
@@ -326,7 +326,7 @@ def main():
     )
     story_titles = result.stdout
 
-    cmd = f"st-ls -f {file_json}".split()
+    cmd = ["st-ls", "-f", file_json]
     result = subprocess.run(
         cmd,
         capture_output=True,
@@ -367,7 +367,7 @@ def main():
 
     ai_model_name = get_ai_model(args.agent)
     if not args.quiet:
-        print(f"  Generating analysis report: {args.agent} / {ai_model_name}")
+        print(f"  Generating analysis report: {args.agent} / {ai_model_name}", flush=True)
 
     _thread = threading.Thread(target=_run_prompt, daemon=True)
     _t0 = time.time()
@@ -401,7 +401,7 @@ def main():
     # and append (if unique) the story to the json container.
     data = {
         "make": args.agent,
-        "model": get_ai_model(args.agent),
+        "model": ai_model,
         "prompt": prompt,
         "gen_payload": gen_payload,
         "gen_response": response,
@@ -426,9 +426,14 @@ def main():
         if not args.quiet:
             print("Added new analysis data")
 
+    selected_raw = main_container["data"][duplicate_index - 1] if duplicate_index is not None else data
+    if not selected_raw.get("data_id"):
+        container_modified = True
+    ensure_data_id(selected_raw)
+
     all_raw_story_text = get_content_auto(response)
     make = args.agent
-    model = get_ai_model(make)
+    model = ai_model
 
     # Massage select raw data into a publishable story
     file_md_content = remove_story_break(all_raw_story_text)
@@ -447,7 +452,7 @@ def main():
 
     # Integrate graphical plots into the report
     # 1. Generate the plots, save file_kv for posting to discourse
-    cmd = f"st-plot --file_kv {file_json}".split()
+    cmd = ["st-plot", "--file_kv", file_json]
     result = subprocess.run(
         cmd,
         capture_output=True,
@@ -551,19 +556,20 @@ def main():
             duplicate_index = index
             break  # No need to check further if a duplicate is found
     if duplicate_index is None:
+        link_new_report(main_container, selected_raw, story)
         main_container["story"].append(story)
         container_modified = True
         if not args.quiet:
             print("Added new story")
     else:
+        if not main_container["story"][duplicate_index - 1].get("source_data_id"):
+            link_new_report(main_container, selected_raw, main_container["story"][duplicate_index - 1])
+            container_modified = True
         if args.verbose:
             print("Story already exists; not adding duplicate")
 
     if container_modified:
-        with open(file_json, 'w', encoding='utf-8') as f:
-            json.dump(main_container, f, ensure_ascii=False, indent=4)
-            f.flush()
-            os.fsync(f.fileno())
+        save_snapshot(file_json, main_container, file_fingerprint)
         if not args.quiet:
             print(f"Story container updated: {file_json}")
 

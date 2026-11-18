@@ -28,6 +28,7 @@ import subprocess
 import sys
 import time
 from mmd_startup import require_config, load_cross_env
+from _report_store import load_snapshot, save_snapshot, ensure_data_id
 
 from ai_handler import process_prompt, get_ai_list, get_ai_model, get_default_ai, get_usage, check_api_key, get_content_auto
 
@@ -246,11 +247,11 @@ def main():
     # Append the new data to the container
     if not os.path.isfile(file_json):
         main_container = {"data": []}
+        file_fingerprint = None
         if args.verbose:
             print("Creating new container")
     else:
-        with open(file_json, 'r') as file:
-            main_container = json.load(file)
+        main_container, file_fingerprint = load_snapshot(file_json)
         if not args.quiet:
             print("Loaded existing container")
 
@@ -317,17 +318,14 @@ def main():
                 break  # No need to check further if a duplicate is found
 
     if duplicate_index is None:
+        ensure_data_id(data)
         main_container["data"].append(data)
         if args.verbose:
             print("Added new data")
 
-    # Atomic write — prevents corruption when multiple st-gen processes run in parallel
-    tmp_json = file_json + ".tmp"
-    with open(tmp_json, 'w', encoding='utf-8') as f:
-        json.dump(main_container, f, ensure_ascii=False, indent=4)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp_json, file_json)
+    if duplicate_index is not None:
+        ensure_data_id(main_container["data"][duplicate_index - 1])
+    save_snapshot(file_json, main_container, file_fingerprint)
 
     data_select = len(main_container["data"])  # last on the list
     # Set up to use more recent generation, even if it is a duplicate,

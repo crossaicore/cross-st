@@ -34,6 +34,8 @@ from tabulate import tabulate
 from tqdm import tqdm
 
 from mmd_branding import get_ai_tag_mini
+from _report_content import content_identity, save_fact
+from _report_store import StoreError
 from mmd_process_report import remove_markdown
 from mmd_util import get_tmp_dir, tmp_safe_name, build_segments, progress_file_path
 from _report_signals import CLAIM_BLOCK_RE as _CLAIM_BLOCK_RE
@@ -448,6 +450,7 @@ def main():
     for story_index, story in enumerate(main_container["story"], start=1):
         if args.story is not None and args.story != story_index:
             continue
+        checked_identity = content_identity(story)
         make = story.get("make")
         model = story.get("model")
         title = story.get("title")
@@ -722,48 +725,14 @@ def main():
         md5_hash = hashlib.md5(data_str.encode('utf-8')).hexdigest()
         fact_check["md5_hash"] = md5_hash
 
-        # ── Exclusive file lock: serialise the read-modify-write so concurrent
-        # st-fact processes (from st-cross) don't clobber each other's results.
-        # The AI call above runs fully in parallel — only this final write step
-        # is serialised. Lock file lives in project-root tmp/.
-        lock_path = str(get_tmp_dir() / f"{tmp_safe_name(file_prefix)}.lock")
-        with open(lock_path, "w") as lock_fh:
-            fcntl.flock(lock_fh, fcntl.LOCK_EX)
-            try:
-                # Re-read the latest container under the lock so we don't
-                # overwrite results written by another process since we started.
-                with open(file_json, 'r') as f:
-                    main_container = json.load(f)
-                story = main_container["story"][story_index - 1]
-                if "fact" not in story:
-                    story["fact"] = []
-
-                # Write segments to the story if this is the first checker to run.
-                if segments_are_new or "segments" not in story or not story["segments"]:
-                    story["segments"] = segments
-
-                duplicate_index = None
-                for index, existing_fc in enumerate(story["fact"], start=1):
-                    if existing_fc.get("md5_hash") == md5_hash:
-                        duplicate_index = index
-                        if args.verbose:
-                            print("Fact check already exists, did not add duplicate")
-                        break
-                if duplicate_index is None:
-                    story["fact"].append(fact_check)
-                    if args.verbose:
-                        print("Added new fact check")
-
-                    tmp_json = file_json + ".tmp"
-                    with open(tmp_json, 'w', encoding='utf-8') as f:
-                        json.dump(main_container, f, ensure_ascii=False, indent=4)
-                        f.flush()
-                        os.fsync(f.fileno())
-                    os.replace(tmp_json, file_json)   # atomic on POSIX
-                    if args.verbose:
-                        print(f"Story container updated: {file_json}")
-            finally:
-                fcntl.flock(lock_fh, fcntl.LOCK_UN)
+        try:
+            added = save_fact(file_json, story_index - 1, checked_identity,
+                              fact_check, segments)
+        except (StoreError, OSError) as exc:
+            print(f"Error: {exc}")
+            sys.exit(1)
+        if args.verbose:
+            print("Added new fact check" if added else "Fact check already exists")
 
         # Clean up progress file now that this story is complete
         if progress_file and os.path.exists(progress_file):

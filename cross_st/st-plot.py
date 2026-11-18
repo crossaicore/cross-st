@@ -62,6 +62,20 @@ def valid_directory(path_str):
     return str(path) + os.sep
 
 
+def _chart_frame(flattened):
+    """Label repeated authors by their current report positions."""
+    frame = pd.DataFrame(flattened)
+    if "report_label" in frame:
+        # Preserve legacy field names while displaying checker/report axes.
+        frame["target"] = frame["report_label"]
+        frame["evaluator"] = frame["target_make"] + ":" + frame["target_model"]
+        frame.attrs["report_identity"] = True
+    else:
+        frame["evaluator"] = frame["evaluator_make"] + ":" + frame["evaluator_model"]
+        frame["target"] = frame["target_make"] + ":" + frame["target_model"]
+    return frame
+
+
 def create_directory(path_str):
     """Create directory if it doesn't exist and return path with separator"""
     path = Path(path_str).resolve()
@@ -77,14 +91,15 @@ def _summarise_plot_data(df) -> str:
     lines = []
 
     # Accuracy ranking — avg score received as report author
-    target_avg = df.groupby("target_make")["score"].mean().sort_values(ascending=False)
+    tracked = df.attrs.get("report_identity", False)
+    target_avg = df.groupby("target" if tracked else "target_make")["score"].mean().sort_values(ascending=False)
     lines.append("REPORT ACCURACY  (avg peer fact-check score, scale −2 to +2):")
     for ai, score in target_avg.items():
         lines.append(f"  {ai:<14}  {score:>+.3f}")
     lines.append("")
 
     # Leniency ranking — avg score given as fact-checker
-    eval_avg = df.groupby("evaluator_make")["score"].mean().sort_values(ascending=False)
+    eval_avg = df.groupby("evaluator" if tracked else "evaluator_make")["score"].mean().sort_values(ascending=False)
     lines.append("EVALUATOR LENIENCY  (avg score given by each fact-checker):")
     for ai, score in eval_avg.items():
         lines.append(f"  {ai:<14}  {score:>+.3f}")
@@ -93,9 +108,16 @@ def _summarise_plot_data(df) -> str:
     # Self vs peer scores (bias detection)
     lines.append("SELF-SCORE vs PEER-SCORE  (positive bias = self-serving):")
     lines.append(f"  {'AI':<14}  {'Self':>6}  {'Peers':>6}  {'Bias':>6}")
-    for ai in sorted(df["target_make"].unique()):
-        s_mask = (df["target_make"] == ai) & (df["evaluator_make"] == ai)
-        p_mask = (df["target_make"] == ai) & (df["evaluator_make"] != ai)
+    for ai in sorted(df["target" if tracked else "target_make"].unique()):
+        if tracked:
+            report_mask = df["target"] == ai
+            same_author = ((df["target_make"] == df["evaluator_make"])
+                           & (df["target_model"] == df["evaluator_model"]))
+            s_mask = report_mask & same_author
+            p_mask = report_mask & ~same_author
+        else:
+            s_mask = (df["target_make"] == ai) & (df["evaluator_make"] == ai)
+            p_mask = (df["target_make"] == ai) & (df["evaluator_make"] != ai)
         self_s = df.loc[s_mask, "score"].mean() if s_mask.any() else None
         peer_s = df.loc[p_mask, "score"].mean() if p_mask.any() else None
         if self_s is not None and peer_s is not None:
@@ -341,7 +363,7 @@ def main():
         sys.exit(1)
 
     # Create a Pandas DataFrame
-    df = pd.DataFrame(flattened_data)
+    df = _chart_frame(flattened_data)
 
     # analysis_plots(df)
 
@@ -350,8 +372,6 @@ def main():
         df = df.drop(columns=["summary"])
 
     # Combine make and model for concise labels
-    df["evaluator"] = df["evaluator_make"] + ":" + df["evaluator_model"]
-    df["target"] = df["target_make"] + ":" + df["target_model"]
 
     for plot in plot_list:
         if args.verbose:

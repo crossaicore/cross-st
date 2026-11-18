@@ -20,6 +20,76 @@
 #   - Tested via tests/test_ask_match.py — keep entries matching their
 #     fixture queries at confidence ≥ 0.5 after edits.
 ---
+- id: update-saved-report
+  question: "How do I update an existing report?"
+  aliases:
+    - "st-update"
+    - "revise a saved report with new information"
+    - "update report without losing manual edits"
+    - "add supplied evidence to a report"
+  error_signatures: []
+  answer: |
+    Run `st-update -s 1 report.json` and describe the changes in your editor.
+    Cross uses the saved Markdown, including your manual edits, and appends a
+    new report. It prints the assigned index and a summary after saving.
+    `-s N` is required when multiple reports exist; inspect them with
+    `st-ls report.json`. With one report, you can omit `-s`.
+
+    Use `--prompt changes.prompt` to read instructions from a file and
+    `--evidence notes.md` for supplied local evidence. Evidence can be repeated.
+    Updates do not browse, fact-check, or publish automatically.
+  see_also:
+    - https://github.com/crossaicore/cross-st/wiki/st-update
+    - https://github.com/crossaicore/cross-st/wiki/st-update-examples
+
+- id: update-iterate-output
+  question: "How do I regenerate an update without adding another report?"
+  aliases:
+    - "st-update iterate"
+    - "replace an update output"
+    - "Ignoring iterate no previous st-update output exists"
+    - "source and output index"
+  error_signatures:
+    - "Ignoring --iterate: no previous st-update output exists in this container."
+  answer: |
+    Use `st-update -s 1 --iterate 2 report.json`: source 1 supplies the report,
+    and existing output 2 supplies the saved update request to refine.
+    Cross replaces output 2 and its associated raw generation only after the
+    new pair is ready. Omit `--iterate` to keep the old output and append instead.
+
+    To include manual edits made to output 2, use `-s 2 --iterate 2`.
+    On the first update, a valid `--iterate` is ignored with a message and an
+    output is appended. Supplied indices must always exist. Once updates have
+    existed, the target needs an associated update request; removing outputs
+    does not reset that rule. Removal shifts later indices, so run `st-ls` again.
+  see_also:
+    - https://github.com/crossaicore/cross-st/wiki/st-update
+
+- id: review-update-changes
+  question: "How do I review what st-update changed?"
+  aliases:
+    - "st-update summary details"
+    - "st-update show-summary"
+    - "review generated changes"
+    - "approval before applying updates"
+  error_signatures: []
+  answer: |
+    Review happens after generation and saving. `--update-summary` is the
+    concise default; `--update-details` adds the exact Markdown diff and AI
+    explanations. Line counts and the diff come from the actual content.
+    AI reasons, source attributions, and uncertainties are not independently
+    verified. Read the whole report with
+    `st-edit --view-only --markdown -s 2 report.json`.
+
+    Run `st-update -s 2 --show-summary --update-details report.json` to read the
+    saved summary without an AI call. If the report has been edited since
+    generation, Cross says the summary describes the generated output.
+    You can edit, iterate, append, or remove the result with explicit indices.
+    There is no separate plan-approval command or shared active-report setting.
+  see_also:
+    - https://github.com/crossaicore/cross-st/wiki/st-update
+    - https://github.com/crossaicore/cross-st/wiki/st-update-examples
+
 - id: what-is-cross-st
   question: "What is cross-st?"
   aliases:

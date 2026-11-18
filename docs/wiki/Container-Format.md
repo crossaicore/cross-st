@@ -11,16 +11,18 @@ Understanding the container lets you inspect, pipe, and post exactly the content
 ```
 subject.json
 ├── data[]            ← one entry per AI generation run
-│   ├── make          "openai"
+│   ├── make          configured agent name (legacy: provider)
 │   ├── model         "gpt-4o"
-│   ├── prompt        the full prompt text sent to the AI
-│   ├── gen_payload   raw request body (model, max_tokens, messages…)
+│   ├── prompt        user-authored generation/update instructions
+│   ├── data_id       opaque association ID
+│   ├── gen_payload   actual API request body (including assembled instructions)
 │   ├── gen_response  raw API response
 │   ├── timing        wall-clock and token metrics
 │   └── md5_hash      fingerprint of prompt + model (dedup key)
 │
 └── story[]           ← one entry per prepared report
-    ├── make          "openai"
+    ├── make          configured agent name (legacy: provider)
+    ├── source_data_id associated raw generation ID
     ├── model         "gpt-4o"
     ├── title         short headline (≤ 10 words)
     ├── markdown      full report body in Markdown
@@ -58,13 +60,14 @@ The resulting 5 × 5 truth matrix — every AI checking every other AI's report 
 
 ## `data[]` — raw generation entries
 
-Created by `st-gen` / `st-bang`. One entry per AI that generated a report.
+Created by generation and update commands. Multiple entries can belong to the same agent or provider/model.
 
 | Key | Type | Description |
 |-----|------|-------------|
-| `make` | string | AI provider name — `"openai"`, `"anthropic"`, `"xai"`, `"gemini"`, `"perplexity"` |
+| `make` | string | Configured agent name in current generators; legacy entries can contain a provider name |
+| `data_id` | string | Opaque ID linking this raw entry to prepared reports |
 | `model` | string | Exact model string used, e.g. `"gpt-4o"`, `"claude-sonnet-4-5"` |
-| `prompt` | string | The full prompt text that was sent to the AI |
+| `prompt` | string | User-authored generation instructions or update request; the assembled API request is retained in `gen_payload` |
 | `gen_payload` | object | Complete API request body (`model`, `max_tokens`, `system`, `messages`) |
 | `gen_response` | object | Raw API response object as returned by the provider |
 | `timing` | object | Performance metrics (see below) |
@@ -87,11 +90,12 @@ Created by `st-gen` / `st-bang`. One entry per AI that generated a report.
 
 ## `story[]` — prepared report entries
 
-Created by `st-prep` (called automatically by `st-gen`). One entry per AI. Contains the human-readable versions of the report extracted from the raw generation.
+Created by `st-prep` (called automatically by `st-gen`) and commands that prepare new outputs. Each entry contains the human-readable versions of one report. Several reports can have the same provider/model.
 
 | Key | Type | Description |
 |-----|------|-------------|
-| `make` | string | AI provider that wrote this report |
+| `make` | string | Authoring agent name; legacy entries can contain a provider name |
+| `source_data_id` | string | ID of the associated raw generation entry |
 | `model` | string | Exact model string |
 | `title` | string | Short headline, ≤ 10 words — used as the Discourse topic title |
 | `markdown` | string | Full report body in Markdown — posted by `st-post`, edited by `st-edit` |
@@ -175,8 +179,32 @@ A container immediately after `st-gen` (one AI, no fact-checks yet):
 | 1b | `st-bang subject.prompt` | `data[0..4]` + `story[0..4]` (all 5 AIs in parallel) |
 | 2 | `st-cross subject.json` | `story[n].fact[]` — 25 entries for a 5-provider run |
 | 3 | `st-post subject.json` | `story[n].topic_id`, `.post_url`, `.mp3_url` |
-| 4 | `st-fix subject.json` | Overwrites `story[n].markdown`, `.text`, `.spoken`, `.title` |
+| 4 | `st-fix subject.json` | Appends a generated fix and its prepared report |
 | 4b | `st-merge subject.json` | Appends a new `story[]` entry (merged from multiple AI reports) |
+| 5 | `st-update -s 1 subject.json` | Appends an associated raw entry and updated report |
+| 5b | `st-update -s 1 --iterate 2 subject.json` | Replaces existing update output 2 and its associated raw entry together |
+| 6 | `st-rm -s 2 subject.json` | Removes report 2 and its associated raw entry; later indices shift down |
+
+## Report associations and updates
+
+New raw entries have an opaque `data_id`; prepared reports refer to it through `source_data_id`. This links a report to the generation that produced it. Do not infer associations from matching array positions or matching provider/model names. Older ambiguous associations are rejected by operations that require an exact pair.
+
+`st-update` adds these ordinary metadata fields:
+
+| Location | Field | Meaning |
+|---|---|---|
+| Raw entry | `prompt`, `update_request` | User-authored update instructions |
+| Raw entry and report | `base_prompt` | Original authored intent carried into the update |
+| Raw entry | `markdown` | Generated report body extracted from the structured AI response |
+| Raw entry | `update_summary` | Actual Markdown diff and line counts, AI explanations, uncertainties, and output SHA-256 |
+| Prepared report | `authored_prompt` | Update instructions used for this output and its scoring |
+| Container | `_st_update` | Records that an update has existed, including after outputs are removed |
+
+The raw `gen_payload` and `gen_response` still record the actual API exchange. Update requests and the original intent are stored separately from the assembled API prompt. AI reasons and source attributions in `update_summary` are unverified explanations; the local Markdown diff records what actually changed.
+
+An append preserves all existing entries. Iteration prepares the full replacement pair before an atomic save; it discards the previous target only on success. Updated content does not inherit fact-checks or publication state. There is no active-report pointer, version graph, or ancestry footer. CLI indices remain current one-based array positions. Charts and rankings distinguish separate reports, including original and updated outputs from the same provider/model, using labels such as `provider:model [S6]` where needed.
+
+See [st-update](st-update) for selection, review, and iteration examples.
 
 ---
 
@@ -184,7 +212,7 @@ A container immediately after `st-gen` (one AI, no fact-checks yet):
 
 ```bash
 st-cat subject.json                  # print the prompt (default)
-st-cat --prompt subject.json         # print the prompt (explicit)
+st-cat --prompt -s 2 subject.json    # print report 2's authored prompt/request
 st-cat -t subject.json               # print the title of story 1
 st-cat --markdown subject.json       # print the Markdown body
 st-cat --text subject.json           # print the plain-text body
@@ -195,3 +223,7 @@ st-cat --markdown -s 3 subject.json  # print story 3's Markdown
 
 **Related:** [st-gen](st-gen) · [st-bang](st-bang) · [st-prep](st-prep) · [st-cross](st-cross) · [st-fact](st-fact) · [st-cat](st-cat) · [st-post](st-post) · [st-analyze](st-analyze)
 
+
+### Publication receipts
+
+Optional top-level `_publications[]` retains known remote titles, site URLs, topic IDs, and post URLs independently of the local report. It supports duplicate-title checks after a local report is edited, replaced, or removed. It does not contain report versions and does not synchronize remote content. Report-level post fields describe the currently attached publication only. If a remote post succeeds but the container cannot be saved, a `.cross-receipts/*.receipt` recovery file preserves the returned publication details.
