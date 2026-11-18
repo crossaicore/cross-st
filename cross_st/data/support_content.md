@@ -6714,6 +6714,10 @@ Cross uses Calendar Versioning (`YYYY.M.R`).
 
 ## [Unreleased]
 
+### Fixed
+- `st-man` discovers installed command scripts, including `st-update` and `st-ask`,
+  and uses the canonical `crossaicore` wiki links.
+
 ### Added
 - `st-update`: analyze supplied evidence, review concise or detailed proposed changes,
   then approve generation of a new report revision in the same container. Includes

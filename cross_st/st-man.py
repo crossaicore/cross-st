@@ -22,7 +22,7 @@ import webbrowser
 # Documentation lives in docs/wiki/ (version-controlled) and is published to the
 # GitHub Wiki via script/push_wiki.sh.  Point st-man --web at the live wiki so
 # that relative links (no .md extension) resolve correctly.
-_WIKI_BASE  = "https://github.com/b202i/cross-st/wiki"
+_WIKI_BASE  = "https://github.com/crossaicore/cross-st/wiki"
 _DOCS_BASE  = _WIKI_BASE          # kept for internal URL building
 _DOCS_HOME  = _WIKI_BASE          # wiki home is the root URL
 
@@ -57,6 +57,7 @@ SEE_ALSO = {
     "st-speed":   ["st-plot",  "st-stones"],
     "st-stones":  ["st-cross", "st-domain", "st-speed"],
     "st-domain":  ["st-stones", "st-new"],
+    "st-update":  ["st-edit", "st-fact", "st-cross", "st-cat"],
     "st-new":     ["st-gen",   "st-bang",  "st-admin"],
     "st-post":    ["st-prep",  "st-fact",  "st-read"],
     "st-fetch":   ["st-gen",   "st-prep"],
@@ -65,17 +66,14 @@ SEE_ALSO = {
     "st-analyze": ["st-fact",  "st-cross", "st-heatmap"],
 }
 
-# Canonical command list — order determines index display
-COMMANDS = [
-    "st",
-    "st-admin",    "st-analyze",  "st-bang",    "st-cat",
-    "st-cross",    "st-domain",   "st-edit",    "st-fact",
-    "st-fetch",    "st-find",     "st-fix",     "st-gen",
-    "st-heatmap",  "st-ls",       "st-man",     "st-merge",
-    "st-new",      "st-plot",     "st-post",    "st-prep",
-    "st-print",    "st-read",     "st-rm",      "st-speak",
-    "st-speed",    "st-stones",   "st-verdict", "st-voice",
-]
+# Discover the scripts shipped with this installation without importing them.
+# A separate hand-maintained list previously hid newly installed commands.
+COMMANDS = (["st"] if os.path.isfile(os.path.join(_HERE, "st.py")) else []) + sorted(
+    filename[:-3] for filename in os.listdir(_HERE)
+    if re.fullmatch(r"st-[a-z][a-z0-9-]*\.py", filename)
+    and os.path.isfile(os.path.join(_HERE, filename))
+)
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
