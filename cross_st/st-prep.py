@@ -152,10 +152,20 @@ def main():
     file_txt_content = clean_paragraphs + "\n\n" + ai_tag_reading
     file_md_content += "\n\n" + ai_tag_reading
 
-    # Extract and clean the title
-    file_title_content = extract_title(file_txt_content)
+    # Preserve imported metadata; extract fallback titles before joining lines.
+    saved_title = select_data.get("title")
+    file_title_content = (saved_title.strip() if isinstance(saved_title, str)
+                          and saved_title.strip() else extract_title(no_md))
     file_title_content = edit_title(file_title_content)  # Remove "Title:" prefix etc.
     file_title_content = file_title_content[:title_truncate_length]
+
+    # Re-preparation of an existing pair preserves saved human edits and facts.
+    if linked_report is not None:
+        file_md_content = linked_report.get("markdown") or linked_report.get("text", "")
+        file_txt_content = linked_report.get("text", "")
+        file_title_content = linked_report.get("title", "")
+        as_spoken = linked_report.get("spoken", "")
+        select_hashtags = linked_report.get("hashtags", [])
 
     if not args.quiet:
         title_words = file_title_content.split()
@@ -167,14 +177,6 @@ def main():
             print(f"Title long: {file_title_content}")
         else:
             print(f"Title: {file_title_content}")
-
-    # Re-preparation of an existing pair preserves saved human edits and facts.
-    if linked_report is not None:
-        file_md_content = linked_report.get("markdown") or linked_report.get("text", "")
-        file_txt_content = linked_report.get("text", "")
-        file_title_content = linked_report.get("title", "")
-        as_spoken = linked_report.get("spoken", "")
-        select_hashtags = linked_report.get("hashtags", [])
 
     if args.mp3:
         from _tts import render_audio

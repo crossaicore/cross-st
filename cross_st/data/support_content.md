@@ -3812,6 +3812,10 @@ source  →  st-fetch  →  article.json  →  st-prep  →  st-fact / st-post /
 
 Use `--no-prep` to store the raw data entry only and run `st-prep` yourself later.
 
+The output container filename is required, including with `--url`. Web imports
+prefer the page's first `<h1>` for the title, falling back to its HTML `<title>`
+and then the URL. `st-prep` preserves this saved title when creating the report.
+
 ---
 
 ## Examples
@@ -6806,6 +6810,8 @@ Cross uses Calendar Versioning (`YYYY.M.R`).
 ## [Unreleased]
 
 ### Fixed
+- `st-prep` preserves titles saved by `st-fetch` and extracts fallback titles
+  before joining text lines, preventing page content from becoming the title.
 - Audio commands automatically disable ONNX Runtime telemetry before loading
   speech libraries, preventing the telemetry device-ID warning without requiring
   users to set an environment variable.

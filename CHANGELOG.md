@@ -10,6 +10,8 @@ Cross uses Calendar Versioning (`YYYY.M.R`).
 ## [Unreleased]
 
 ### Fixed
+- `st-prep` preserves titles saved by `st-fetch` and extracts fallback titles
+  before joining text lines, preventing page content from becoming the title.
 - Audio commands automatically disable ONNX Runtime telemetry before loading
   speech libraries, preventing the telemetry device-ID warning without requiring
   users to set an environment variable.

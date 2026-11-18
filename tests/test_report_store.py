@@ -317,6 +317,70 @@ def test_st_prep_links_imported_raw_and_preserves_edits_on_repeat(tmp_path, monk
     assert second == first
 
 
+@pytest.mark.parametrize("saved_title", [None, "", "  ", 123, "Green Bean Casserole"])
+def test_st_prep_title_does_not_absorb_single_spaced_body(tmp_path, monkeypatch, capsys, saved_title):
+    prep = module("st-prep")
+    path = tmp_path / "import.json"
+    body = "# Green Bean Casserole\nFood\nA report with several lines.\n" + "More content. " * 30
+    path.write_text(json.dumps({"data": [{"make": "st-fetch", "model": "file",
+        "title": saved_title, "markdown": body}], "story": []}))
+    monkeypatch.setattr(prep, "load_cross_env", lambda: None)
+    monkeypatch.setattr(prep, "require_config", lambda: None)
+    monkeypatch.setattr(prep.sys, "argv", ["st-prep", str(path), "--title"])
+    prep.main()
+    saved, _ = store.load_snapshot(path)
+    assert saved["story"][0]["title"] == "Green Bean Casserole"
+    assert path.with_suffix(".title").read_text() == "Green Bean Casserole"
+    assert "More content." in saved["story"][0]["markdown"]
+    assert "Title very long" not in capsys.readouterr().out
+
+
+def test_fetch_url_title_survives_preparation(tmp_path, monkeypatch, capsys):
+    from types import SimpleNamespace
+    import requests
+
+    pytest.importorskip("bs4")
+    fetch = module("st-fetch")
+    prep = module("st-prep")
+    html = """<html><head><title>Green Bean Casserole - Food - Shangri-La</title></head>
+    <body><h1>Green Bean Casserole</h1><p>Food</p><p>Author and date</p>
+    <p>A report with ingredients and cooking directions.</p></body></html>"""
+    monkeypatch.setattr(requests, "get", lambda *a, **kw: SimpleNamespace(
+        text=html, status_code=200, raise_for_status=lambda: None))
+    for command in (fetch, prep):
+        monkeypatch.setattr(command, "load_cross_env", lambda: None)
+        monkeypatch.setattr(command, "require_config", lambda: None)
+    path = tmp_path / "green-bean-casserole.json"
+
+    def run_prep(argv, **kwargs):
+        assert argv[:3] == ["st-prep", "-d", "1"]
+        with monkeypatch.context() as context:
+            context.setattr(prep.sys, "argv", argv)
+            prep.main()
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(fetch.subprocess, "run", run_prep)
+    monkeypatch.setattr(fetch.sys, "argv", ["st-fetch", "--url",
+        "https://example.test/t/green-bean-casserole/494", str(path)])
+    fetch.main()
+    saved, _ = store.load_snapshot(path)
+    assert saved["data"][0]["title"] == "Green Bean Casserole"
+    assert saved["story"][0]["title"] == "Green Bean Casserole"
+    assert store.raw_index(saved, 0) == 0
+    assert "ingredients" in saved["story"][0]["markdown"]
+    assert "Title very long" not in capsys.readouterr().out
+
+    # Re-preparing must preserve an authored title and existing fact checks.
+    saved["story"][0]["title"] = "My edited casserole report"
+    saved["story"][0]["fact"] = [{"score": 2}]
+    path.write_text(json.dumps(saved))
+    monkeypatch.setattr(prep.sys, "argv", ["st-prep", str(path), "--title"])
+    prep.main()
+    assert store.load_snapshot(path)[0] == saved
+    assert path.with_suffix(".title").read_text() == "My edited casserole report"
+    assert "Title: My edited casserole report" in capsys.readouterr().out
+
+
 def test_st_prep_update_uses_clean_markdown_not_response_json(tmp_path, monkeypatch):
     prep = module("st-prep")
     path = tmp_path / "update.json"
