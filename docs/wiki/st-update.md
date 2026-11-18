@@ -56,6 +56,37 @@ container or feed every earlier prompt back into the AI.
 The concise proposed summary is the default. `--update-details` chooses a more
 thorough review; it does not authorize changes by itself.
 
+## Which report do I see afterward?
+
+Approval creates a **new report entry** in the existing JSON container and makes
+its revision active. It does not overwrite the selected earlier entry or create
+a separate report file. The completion message gives the new report's index.
+
+For example, if the container starts with one report at index 1, its first update
+is appended at index 2. These commands then select the following:
+
+| Command | Result immediately after that update |
+|---|---|
+| `st-ls pilot.json` | Lists the active report at index 2, with its version label |
+| `st-cat --markdown pilot.json` | Displays the active report: index 2 |
+| `st-cat --markdown -s 2 pilot.json` | Explicitly displays the new report at index 2 |
+| `st-cat --markdown -s 1 pilot.json` | Explicitly displays the preserved original at index 1 |
+| `st-update pilot.json --history` | Lists both versions, indices, and revision IDs |
+
+If there were five reports before the update, the appended report would be at
+index 6. Existing indices never change. `st-ls` retains that original index in
+its **S** column; filtering the table does not renumber it to 1.
+
+The default selection changed **for revisioned containers**: omitting `-s` uses
+the active report. For older containers without revision metadata, `st-cat`
+still defaults to index 1 and `st-ls` still lists all reports. Explicit `-s N`
+always chooses that stored index. If you activate an older revision, the default
+follows your choice rather than assuming that the newest entry is active.
+
+`st-ls --all` means all output sections, not all historical revisions. Use
+`st-update --history` to inspect history. In `st-ls`, `-s` selects the report
+section; it does not take a report number.
+
 ## What do I put in each input file?
 
 Your request can be a few sentences. It is **instructions for this update**,

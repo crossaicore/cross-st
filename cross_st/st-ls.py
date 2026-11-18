@@ -2,10 +2,13 @@
 """
 ## st-ls — List the contents of a story container
 
-List stories, data, and fact-checks inside a `.json` container.
-Default shows the story table — a quick overview of all stories and their
-fact-check scores, much like the Linux `ls` command gives a directory listing.
-Use `-a` / `--all` to show every section, or combine flags as needed.
+List reports, data, and fact-checks inside a `.json` container.
+Default shows the report table. After st-update, this lists the active revision
+(normally the new report), retaining its original index in the S column and
+showing its version in Flag. Legacy containers without revision metadata list
+all reports. Use st-update FILE.json --history to see every stored version.
+Use -a / --all to show every section; it does not expand revision history.
+Here -s is a section switch, not the numeric selector used by st-cat.
 
 Run after:  st-gen   (generated your first story)
             st-bang  (generated from all AI providers)

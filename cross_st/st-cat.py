@@ -8,12 +8,18 @@ other tools or shell scripts.
 
 ```
 st-cat subject.json                 # print the prompt (default)
-st-cat -t subject.json              # print title of story 1
+st-cat -t subject.json              # print title of the default selected report
 st-cat --markdown -s 3 subject.json # print markdown of story 3
 st-cat -f 2 -s 1 subject.json       # print fact-check report 2 from story 1
 st-cat --text -s 2 subject.json     # print plain text body of story 2
 st-cat --prompt subject.json        # print the original prompt text
 ```
+
+Selection: after st-update, omitting -s reads the active report (normally the
+newly generated version). Without revision metadata, the default remains report
+index 1. An explicit -s N always selects the original container index, including
+historical reports. Use st-ls for the active report and st-update --history for
+all stored versions. Several active candidates require an explicit -s N.
 
 Options: -s story  -f fact  --title  --text  --markdown  --hashtags  --spoken  --prompt
 """
@@ -35,7 +41,7 @@ def main():
     parser.add_argument('json_file', type=str,
                         help='Path to the JSON file', metavar='file.json')
     parser.add_argument('-s', '--story', type=int, default=None,
-                        help='Story number (integer), default: 1')
+                        help='Report index (one-based); default: active report for revisioned containers, otherwise 1')
     parser.add_argument('-f', '--fact', type=int,
                         help='Fact-check report number (integer), default: none')
     parser.add_argument('--markdown', action='store_true',

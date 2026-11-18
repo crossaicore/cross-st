@@ -2,11 +2,17 @@
 
 Prints fields from a story container to stdout. Useful for piping into other tools or shell scripts. Defaults to printing the prompt if no field flag is given.
 
+After `st-update`, `st-cat --markdown subject.json` displays the active report,
+normally the new version. Explicit `-s N` always selects that original container
+index, including history. Without revision metadata, the default remains index 1.
+Use `st-update subject.json --history` to find version indices. If the active
+revision has several candidates, choose one explicitly with `-s N`.
+
 ## Examples
 
 ```bash
 st-cat subject.json                 # print the prompt (default)
-st-cat -t subject.json              # print title of story 1
+st-cat -t subject.json              # print title of the default selected report
 st-cat --markdown -s 3 subject.json # print markdown of story 3
 st-cat -f 2 -s 1 subject.json       # print fact-check report 2 from story 1
 st-cat --text -s 2 subject.json     # print plain text body of story 2
@@ -17,7 +23,7 @@ st-cat --prompt subject.json        # print the original prompt text
 
 | Option | Description |
 |--------|-------------|
-| `-s N`, `--story N` | Story number to read (integer), default: `1` |
+| `-s N`, `--story N` | Story number to read (integer), default: active report in a revisioned container, otherwise `1` |
 | `-f N`, `--fact N` | Fact-check report number to read (integer); prints the specified fact-check instead of a story |
 | `--title`, `-t` | Print the story title |
 | `--text` | Print the plain-text story body |

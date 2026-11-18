@@ -2,6 +2,16 @@
 
 Lists the stories and fact-checks stored inside a `.json` container — titles, AI authors, scores, and timestamps.
 
+After `st-update`, the report table lists the active revision, normally the new
+report. Its **S** column retains the original container index and **Flag** shows
+the report version. For example, a new report appended after five existing
+entries is displayed as index 6, not renumbered to 1. Older containers without
+revision metadata still list all reports.
+
+Use `st-update subject.json --history` to see all stored versions. `--all` expands
+output sections, not historical revision selection. The `-s` switch here selects
+the report section; unlike `st-cat -s N`, it takes no report number.
+
 ## Examples
 
 ```bash

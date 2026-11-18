@@ -3348,11 +3348,17 @@ Launches one `st-gen --bang N` subprocess per AI. Each writes to `tmp/<story>_N.
 
 Prints fields from a story container to stdout. Useful for piping into other tools or shell scripts. Defaults to printing the prompt if no field flag is given.
 
+After `st-update`, `st-cat --markdown subject.json` displays the active report,
+normally the new version. Explicit `-s N` always selects that original container
+index, including history. Without revision metadata, the default remains index 1.
+Use `st-update subject.json --history` to find version indices. If the active
+revision has several candidates, choose one explicitly with `-s N`.
+
 ## Examples
 
 ```bash
 st-cat subject.json                 # print the prompt (default)
-st-cat -t subject.json              # print title of story 1
+st-cat -t subject.json              # print title of the default selected report
 st-cat --markdown -s 3 subject.json # print markdown of story 3
 st-cat -f 2 -s 1 subject.json       # print fact-check report 2 from story 1
 st-cat --text -s 2 subject.json     # print plain text body of story 2
@@ -3363,7 +3369,7 @@ st-cat --prompt subject.json        # print the original prompt text
 
 | Option | Description |
 |--------|-------------|
-| `-s N`, `--story N` | Story number to read (integer), default: `1` |
+| `-s N`, `--story N` | Story number to read (integer), default: active report in a revisioned container, otherwise `1` |
 | `-f N`, `--fact N` | Fact-check report number to read (integer); prints the specified fact-check instead of a story |
 | `--title`, `-t` | Print the story title |
 | `--text` | Print the plain-text story body |
@@ -4268,6 +4274,16 @@ The `--path` directory is created automatically if it does not exist.
 # st-ls — List the contents of a story container
 
 Lists the stories and fact-checks stored inside a `.json` container — titles, AI authors, scores, and timestamps.
+
+After `st-update`, the report table lists the active revision, normally the new
+report. Its **S** column retains the original container index and **Flag** shows
+the report version. For example, a new report appended after five existing
+entries is displayed as index 6, not renumbered to 1. Older containers without
+revision metadata still list all reports.
+
+Use `st-update subject.json --history` to see all stored versions. `--all` expands
+output sections, not historical revision selection. The `-s` switch here selects
+the report section; unlike `st-cat -s N`, it takes no report number.
 
 ## Examples
 
@@ -5540,6 +5556,37 @@ container or feed every earlier prompt back into the AI.
 The concise proposed summary is the default. `--update-details` chooses a more
 thorough review; it does not authorize changes by itself.
 
+## Which report do I see afterward?
+
+Approval creates a **new report entry** in the existing JSON container and makes
+its revision active. It does not overwrite the selected earlier entry or create
+a separate report file. The completion message gives the new report's index.
+
+For example, if the container starts with one report at index 1, its first update
+is appended at index 2. These commands then select the following:
+
+| Command | Result immediately after that update |
+|---|---|
+| `st-ls pilot.json` | Lists the active report at index 2, with its version label |
+| `st-cat --markdown pilot.json` | Displays the active report: index 2 |
+| `st-cat --markdown -s 2 pilot.json` | Explicitly displays the new report at index 2 |
+| `st-cat --markdown -s 1 pilot.json` | Explicitly displays the preserved original at index 1 |
+| `st-update pilot.json --history` | Lists both versions, indices, and revision IDs |
+
+If there were five reports before the update, the appended report would be at
+index 6. Existing indices never change. `st-ls` retains that original index in
+its **S** column; filtering the table does not renumber it to 1.
+
+The default selection changed **for revisioned containers**: omitting `-s` uses
+the active report. For older containers without revision metadata, `st-cat`
+still defaults to index 1 and `st-ls` still lists all reports. Explicit `-s N`
+always chooses that stored index. If you activate an older revision, the default
+follows your choice rather than assuming that the newest entry is active.
+
+`st-ls --all` means all output sections, not all historical revisions. Use
+`st-update --history` to inspect history. In `st-ls`, `-s` selects the report
+section; it does not take a report number.
+
 ## What do I put in each input file?
 
 Your request can be a few sentences. It is **instructions for this update**,
@@ -6317,7 +6364,7 @@ Source: `cross_st/st-bang.py`.
 Source: `cross_st/st-cat.py`.
 
 - `json_file`: Path to the JSON file
-- `-s`, `--story`: Story number (integer), default: 1
+- `-s`, `--story`: Report index (one-based); default: active report for revisioned containers, otherwise 1
 - `-f`, `--fact`: Fact-check report number (integer), default: none
 - `--markdown`: Story markdown, default: off
 - `--hashtags`: Story hashtags, default: off
