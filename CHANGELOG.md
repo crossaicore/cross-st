@@ -10,6 +10,9 @@ Cross uses Calendar Versioning (`YYYY.M.R`).
 ## [Unreleased]
 
 ### Fixed
+- `st-update --help`, `st-man st-update`, and the wiki now explain the first-run
+  workflow, input files, review decisions, saved versions, and AI-call behavior.
+  Developer manual pages also show the local wiki file path when available.
 - `st-man` discovers installed command scripts, including `st-update` and `st-ask`,
   and uses the canonical `crossaicore` wiki links.
 

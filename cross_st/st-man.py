@@ -182,6 +182,9 @@ def _print_command_help(name: str) -> None:
 
     print()
     print("─" * _WIDTH)
+    local_guide = os.path.join(os.path.dirname(_HERE), "docs", "wiki", f"{name}.md")
+    if os.path.isfile(local_guide):
+        print(f"  Local guide: {local_guide}")
     print(f"  Wiki:  {wiki_url}")
     print(f"  Tip:   st-man {name} --web   opens the full wiki page in your browser")
     print(f"         st-man {name} --doc   shows the raw source docstring")

@@ -1,15 +1,75 @@
 #!/usr/bin/env python3
 """st-update — Research, review, and apply updates to an existing report.
 
-Keeps earlier revisions and fact checks in the same JSON container. Research
-uses supplied evidence; it does not browse the web. The proposed changes must
-be approved before a revised report is generated. Fact-checking is optional.
+Start with a report you already have in a .json container. Describe what should
+change; Cross proposes an update plan, waits for your approval, then saves a new
+report version in that SAME file. Earlier versions and their fact checks remain.
 
+## Start here
+
+    st-update report.json --update-details
+
+1. Cross selects the active report, or asks which report to update.
+2. Your configured editor opens. Write the changes you want, then save and close.
+   For example: "Add these new pilot results: 12 tasks completed, 3 failed.
+   Replace the earlier counts. Keep the headings and flag missing failure reasons."
+3. The AI analyzes your request and supplied material, then shows PROPOSED
+   changes. The report has not been changed at this point.
+4. Type Approve to generate the revision, Details or Summary to inspect the
+   plan, Revise to edit your request and get a new plan, or Cancel to stop.
+5. After approval, Cross saves a new version and makes it the active report.
+   Read it with: st-cat --markdown report.json
+
+Research here means analyzing material you supply, including facts written in
+these instructions. It does not search the web. Add local source files with
+--evidence FILE (repeatable). The AI is asked to preserve your report's wording,
+headings, tables, and manual edits except where the approved changes require it.
+
+The normal path makes one planning call, then one generation call after approval.
+Changing summary views makes no extra call. Revising the request makes a new
+planning call. API cost depends on the selected agent and inputs.
+
+## Common workflows
+
+    # Use the concise review (default); enter your request in the editor.
     st-update report.json
-    st-update report.json --prompt changes.prompt --update-details
-    st-update report.json --prompt changes.prompt --review-only
+
+    # Read an existing change request and attach new evidence; still approve
+    # interactively. changes.prompt contains UPDATE instructions, not the report.
+    st-update report.json --prompt changes.prompt --evidence findings.md
+
+    # Research and inspect proposed changes now; leave the report unchanged.
+    st-update report.json --prompt changes.prompt --update-details --review-only
+
+    # Later: approve the exact saved plan using the path printed by review-only.
     st-update report.json --apply-plan PATH_TO_SAVED_PLAN
-    st-update report.json --history
+
+    # Check local inputs without making any AI call or saving a plan.
+    st-update report.json --prompt changes.prompt --dry-run
+
+## Versions and checking
+
+    st-update report.json --history                  # list versions and IDs
+    st-update report.json -s 1                       # branch from report index 1
+    st-update report.json --activate REVISION_ID      # return to an older version
+    st-update report.json --update-details --check   # verify the new report too
+
+Fact-checking is OFF by default. --check verifies only the new report after it
+is saved. --with-facts instead includes earlier findings as input; it runs no
+checks. Generated versions start unverified and are not automatically published.
+
+--review-only makes a planning call and saves a .plan file beside the container
+in .cross-update/. --dry-run makes no AI calls and writes nothing. Scripts must
+use --prompt with --review-only, then --apply-plan after review; --prompt alone
+does not bypass approval. Changed containers or changed saved plans are rejected.
+
+Use --brief FILE for lasting audience/scope requirements; use --base-prompt FILE
+only to supply missing baseline intent. --recover-attempt FILE retries saving a
+retained generated response after a preparation/write failure without another
+AI generation call. The saved plan and current inputs are checked again.
+
+Full walkthrough and worked examples: docs/wiki/st-update.md and
+docs/wiki/st-update-examples.md in the cross-st checkout.
 """
 from __future__ import annotations
 
@@ -30,11 +90,15 @@ import _update_plan as engine
 
 
 def parser_for_cli():
-    parser = argparse.ArgumentParser(prog="st-update", description=__doc__.split("\n\n")[0])
-    parser.add_argument("json_file", type=Path, metavar="FILE.json")
+    overview, workflows = __doc__.split("## Common workflows", 1)
+    parser = argparse.ArgumentParser(
+        prog="st-update", formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=overview.strip().replace("## ", ""),
+        epilog=("Common workflows" + workflows).replace("## ", ""))
+    parser.add_argument("json_file", type=Path, metavar="FILE.json", help="Existing report container; the new version is saved in this same file")
     parser.add_argument("-s", "--story", dest="index", type=int, help="Baseline report index (one-based)")
     add_agent_arg(parser)
-    parser.add_argument("--prompt", type=Path, help="Read the update request without opening an editor")
+    parser.add_argument("--prompt", type=Path, help="Read UPDATE instructions from FILE; approval is still required")
     parser.add_argument("--brief", type=Path, help="Supply persistent purpose, audience, and constraints for future updates")
     parser.add_argument("--base-prompt", type=Path, help="Supply missing baseline intent")
     parser.add_argument("--evidence", type=Path, action="append", default=[], help="Local UTF-8 evidence (repeatable)")
@@ -46,8 +110,8 @@ def parser_for_cli():
     views.add_argument("--update-details", action="store_true", help="Show every planned change, reason, source, and uncertainty")
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--draft-only", action="store_true", help="Save/edit a request without AI calls")
-    modes.add_argument("--dry-run", action="store_true", help="Validate local inputs; no editor, AI calls, or writes")
-    modes.add_argument("--review-only", action="store_true", help="Research and save a plan; do not generate a report")
+    modes.add_argument("--dry-run", action="store_true", help="Validate local inputs only; requires --prompt; no AI calls or writes")
+    modes.add_argument("--review-only", action="store_true", help="Make a planning call, display/save proposed changes, and stop before generation")
     modes.add_argument("--apply-plan", type=Path, help="Approve and apply an exact previously saved plan")
     modes.add_argument("--recover-attempt", type=Path, help="Approve and save a retained response without another AI call")
     modes.add_argument("--history", action="store_true", help="List revisions without AI calls")

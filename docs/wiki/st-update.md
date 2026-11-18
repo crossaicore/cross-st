@@ -7,15 +7,84 @@ The workflow is **describe → research → review → approve → generate**. R
 analyzes your supplied material; it does not fetch new information from the web.
 Fact-checking is optional.
 
+## Your first update, step by step
+
+You need an **existing `.json` report container**. This command updates a report
+already in that file. To create an initial report, start with [st-new](st-new)
+and [st-gen](st-gen).
+
+Suppose `pilot.json` contains a pilot report and you have received new results.
+Start with:
+
 ```bash
-st-update research.json
-st-update research.json -s 2 --prompt changes.prompt --evidence findings.md --update-details
+st-update pilot.json --update-details
 ```
 
-The selected report is the **alpha** for this update. Its saved Markdown,
-including your manual edits, supplies the starting content and formatting.
-The earlier authored prompt supplies context when available. Other versions
-are retained in history rather than automatically sent to the AI.
+1. **Choose the report.** Cross uses the active report. If there is more than one
+   candidate, it asks you to choose. You can select an existing report index with
+   `-s N`. The selected starting report is called the **alpha**.
+2. **Describe the update.** Your configured editor opens a new update-request
+   file. Write what should change, including any new facts you already have.
+   Save and close the editor. For example:
+
+   ```text
+   The new pilot log reports 12 completed tasks and 3 failed tasks.
+   These replace the earlier counts; do not add the old and new totals.
+   Update the Findings section and recommend reviewing the failures.
+   Keep the current headings, tone, and other observations.
+   ```
+
+3. **Read the proposed changes.** The AI analyzes that request and the selected
+   report. Cross displays a plan describing the intended edits, reasons, source
+   references, and uncertainty. At this point the report file is unchanged.
+4. **Choose an action.** Type `Approve` to generate the report, `Summary` or
+   `Details` to switch views, `Revise` to edit your request and get a new plan,
+   or `Cancel` to stop. Pressing Enter alone does not approve.
+5. **Read the new version.** After approval, Cross generates and saves a new
+   report in **the same `pilot.json` file** and makes it the active report.
+   The earlier version and its checks remain in that file.
+
+   ```bash
+   st-cat --markdown pilot.json
+   st-update pilot.json --history
+   ```
+
+For a container with one initial report, the first update becomes v2, based on
+v1. Run `st-update pilot.json` again to update v2. You do not need to create a new
+container or feed every earlier prompt back into the AI.
+
+The concise proposed summary is the default. `--update-details` chooses a more
+thorough review; it does not authorize changes by itself.
+
+## What do I put in each input file?
+
+Your request can be a few sentences. It is **instructions for this update**,
+not a replacement report and not a request to regenerate the original report.
+You can supply it from a file instead of typing it in the editor:
+
+```bash
+st-update pilot.json --prompt changes.prompt --evidence new-pilot-log.md
+```
+
+This still waits for interactive approval after displaying the plan.
+
+| Input | What it contains | When you need it |
+|---|---|---|
+| `pilot.json` | Existing report, prior versions, and any checks | Always |
+| `changes.prompt` via `--prompt` | What to change and what to preserve | Optional alternative to the editor |
+| `new-pilot-log.md` via `--evidence` | Source material supporting the changes | Optional; repeat the flag for multiple text/Markdown files |
+| `--brief FILE` | Lasting purpose, audience, and scope requirements | Optional; carried into later updates |
+| `--base-prompt FILE` | Missing intent behind the starting report | Optional; an absent original prompt does not block updates |
+
+Cross uses the selected report's saved Markdown, including human edits, and its
+associated authored prompt when identifiable. It asks the AI to preserve the
+current wording and format outside the approved edits. Old versions stay in
+history rather than being automatically included in each AI request.
+
+**“Research” currently means analyzing your supplied material.** The command
+does not search the web or obtain new figures from a date alone. Put the new
+information in your request or attach it as evidence. Use separate import tools
+to turn sources into local text/Markdown first when needed.
 
 ## Review before applying
 
