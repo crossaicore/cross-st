@@ -88,7 +88,7 @@ def test_st_speak_passes_voice_override_to_kokoro(speech, monkeypatch, tmp_path)
     monkeypatch.setenv("TTS_BACKEND", "kokoro")
     report = tmp_path / "sample report.json"
     report.write_text(json.dumps({"story": [{"spoken": "Read this report."}]}))
-    monkeypatch.setattr(sys, "argv", ["st-speak", "--story", "0", "--voice", "heart", str(report)])
+    monkeypatch.setattr(sys, "argv", ["st-speak", "--story", "1", "--voice", "heart", str(report)])
     module.main()
     speech.kokoro_tts_server.assert_awaited_once_with(
         "Read this report.", str(report.with_suffix(".mp3")), "mp3", "af_heart")

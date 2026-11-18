@@ -140,7 +140,7 @@ menus = {
             "P": "Save all Cross-Product plots",
             "r": "Remove story (and fact-checks)",
             "R": "Remove fact-check",
-            "v": "Speak story aloud with current voice",
+            "v": "Speak report aloud with current voice",
             "V": "Render current voice to mp3 file",
         }),
         "x": "Settings",
@@ -408,8 +408,8 @@ def execute_menu(menu_name, choice):
                 case "v":
                     # Render then play aloud — two sequential steps
                     mp3 = file_prefix + '.mp3'
-                    speak_cmd = f"st-speak -s {story_sel} {file_json}".split()
-                    play_cmd  = f"afplay {mp3}".split()
+                    speak_cmd = ["st-speak", "-s", str(story_sel), file_json]
+                    play_cmd  = ["afplay", mp3]
                     print(f"\n\nExecuting command: st-speak -s {story_sel} {file_json} && afplay {mp3}")
                     try:
                         result = subprocess.run(speak_cmd)
@@ -420,7 +420,7 @@ def execute_menu(menu_name, choice):
                         print()  # clean line after ^C
                 case "V":
                     mp3 = file_prefix + '.mp3'
-                    speak_cmd = f"st-speak -s {story_sel} {file_json}".split()
+                    speak_cmd = ["st-speak", "-s", str(story_sel), file_json]
                     print(f"\n\nExecuting command: st-speak -s {story_sel} {file_json}")
                     try:
                         result = subprocess.run(speak_cmd)

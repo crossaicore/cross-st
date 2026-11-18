@@ -9,6 +9,13 @@ Cross uses Calendar Versioning (`YYYY.M.R`).
 
 ## [Unreleased]
 
+### Fixed
+- `st-speak -s N` now selects the same one-based report index as `st-ls` and
+  the interactive menu. Previously it read the next report or failed at the end
+  of the list. Invalid indices and missing spoken text fail before rendering.
+- Utility speech commands preserve filenames containing spaces, and a failed
+  render returns a nonzero status so the menu does not play an older MP3.
+
 ### Added
 - `st-update` generates an updated report from saved Markdown, an authored request,
   and optional local evidence. Append a new output or replace an existing update

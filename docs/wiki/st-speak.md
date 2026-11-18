@@ -14,11 +14,13 @@ MP3 output. The first render downloads about 350 MB of assets. See
 ## Examples
 
 ```bash
-st-speak subject.json               # render story 1 → subject.mp3
-st-speak -s 3 subject.json          # render story 3
+st-speak subject.json               # render report 1 → subject.mp3
+st-speak -s 3 subject.json          # render report 3
 st-speak --source fact subject.json # read the fact-check report aloud
 st-speak --voice en_US-ryan-high subject.json  # override voice for this render
 ```
+
+Report indices match `st-ls`: `-s 1` selects the first report and `-s 2` selects the second. Omitting `-s` selects report 1. Updated reports use these same indices.
 
 **Options:** `-s`  `story`  `--source`  `{text,fact}`  `--voice`  `model`  `-v`  `-q`
 
@@ -32,6 +34,6 @@ Requires `pipx install 'cross-st[tts]'`. Uses `_tts.py` to select Kokoro or Wyom
 
 ## Additional current options
 
-- `-s`, `--story`: Story to convert (integer), default 1
+- `-s`, `--story`: Report index shown by `st-ls` (1-based), default 1
 - `-v`, `--verbose`: Enable verbose output, default is verbose
 - `-q`, `--quiet`: Enable minimal output

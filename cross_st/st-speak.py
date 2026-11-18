@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-## st-speak — Render a story into spoken audio (MP3)
+## st-speak — Render a report into spoken audio (MP3)
 
-Converts the spoken-text field of a story from a .json container into an MP3
+Converts the spoken-text field of a report from a .json container into an MP3
 file using YakYak with local Kokoro or a Wyoming-Piper server.
 
 ```
-st-speak subject.json               # render story 1 → subject.mp3
-st-speak -s 3 subject.json          # render story 3
+st-speak subject.json               # render report 1 → subject.mp3
+st-speak -s 3 subject.json          # render report 3
 st-speak --source fact subject.json # read the fact-check report aloud
 st-speak --voice en_US-ryan-high subject.json  # override voice for this render
 ```
@@ -29,7 +29,7 @@ every supported Python version on macOS ARM and Linux).
 See also: st-admin (set default TTS voice)
           st-voice  (browse / download Piper voice models)
 
-Options: -s story  --source {text,fact}  --voice model  -v  -q
+Options: -s report  --source {text,fact}  --voice model  -v  -q
 """
 
 import argparse
@@ -48,11 +48,11 @@ def main():
     require_config()
     parser = argparse.ArgumentParser(
         prog='st-speak',
-        description='Render a story into spoken audio, an mp3 file.')
+        description='Render a report into spoken audio, an mp3 file.')
     parser.add_argument('json_file', type=str,
                         help='Path to the JSON file', metavar='file.json')
     parser.add_argument('-s', '--story', type=int, default=1,
-                        help='Story to convert (integer), default 1')
+                        help='Report index shown by st-ls (1-based), default 1')
     parser.add_argument('--source', type=str,
                         choices=['text', 'fact'], default='text',
                         help="Select text source. Options: 'text' (default) or 'fact'.")
@@ -82,14 +82,23 @@ def main():
 
         with open(file_json, 'r') as file:
             main_container = json.load(file)
+            reports = main_container.get("story", [])
+            if not 1 <= args.story <= len(reports):
+                print(f"Error: Report index out of range: {args.story}. "
+                      f"Container has {len(reports)} report(s); use st-ls to inspect indices.")
+                sys.exit(1)
+            report = reports[args.story - 1]
             if args.source == 'text':
-                tts_source = main_container["story"][args.story]["spoken"]
-            elif "fact" in main_container["story"][args.story]:
-                fact = main_container["story"][args.story]["fact"]
+                tts_source = report.get("spoken")
+                if not isinstance(tts_source, str) or not tts_source.strip():
+                    print(f"Error: Report {args.story} has no spoken text.")
+                    sys.exit(1)
+            elif "fact" in report:
+                fact = report["fact"]
                 step1 = for_speaking(fact)
                 tts_source = remove_markdown(step1)
             else:
-                tts_source = "This story does not have any fact check data"
+                tts_source = "This report does not have any fact check data"
 
     except json.JSONDecodeError:
         print(f"Error: The file {file_json} contains invalid JSON.")
@@ -98,8 +107,9 @@ def main():
         print(f"An unexpected error occurred: {e}")
         sys.exit(1)
 
-    render_audio(tts_source, file_mp3, args.voice,
-                 quiet=args.quiet, verbose=args.verbose)
+    if not render_audio(tts_source, file_mp3, args.voice,
+                        quiet=args.quiet, verbose=args.verbose):
+        sys.exit(1)
 
 
 if __name__ == "__main__":
