@@ -62,6 +62,7 @@ import json
 import os
 import re
 import sys
+from _report_revisions import selected_indices
 from mmd_startup import require_config
 from pathlib import Path
 from fnmatch import fnmatch
@@ -200,6 +201,8 @@ def search_json_file(filepath, required_patterns, optional_patterns, excluded_pa
         # Search in stories
         stories = container.get('story', [])
         for i, story in enumerate(stories, start=1):
+            if i - 1 not in selected_indices(container):
+                continue
             # Search title
             if search_title:
                 title = story.get('title', '')

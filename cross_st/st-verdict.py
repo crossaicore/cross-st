@@ -40,6 +40,8 @@ import os
 import re
 import sys
 import threading
+from _report_revisions import is_revisioned, selected_indices
+from _revision_compat import single_index
 from mmd_startup import load_cross_env, require_config
 from pathlib import Path
 
@@ -68,7 +70,8 @@ def valid_directory(path_str):
 def extract_story_titles(container):
     """Return a compact make/model: title list from the container."""
     lines = []
-    for s in container.get("story", []):
+    for index in container.get("_selected_report_indices", selected_indices(container)):
+        s = container["story"][index]
         make  = s.get("make",  "?")
         model = s.get("model", "?")
         title = s.get("title", "")[:90]
@@ -78,7 +81,8 @@ def extract_story_titles(container):
 
 def subject_from_container(container, json_file):
     """Infer a short subject label from the first story title, falling back to filename."""
-    for s in container.get("story", []):
+    for index in container.get("_selected_report_indices", selected_indices(container)):
+        s = container["story"][index]
         title = s.get("title", "").strip()
         if title:
             words = title.split()
@@ -153,7 +157,8 @@ def format_authors_for_prompt(container, weights=None):
 
     # Evaluators = every fact[*].make:model that appears anywhere
     evaluator_set = set()
-    for story in container.get("story", []):
+    for index in container.get("_selected_report_indices", selected_indices(container)):
+        story = container["story"][index]
         for fact in story.get("fact", []):
             ev_make = fact.get("make", "?")
             ev_model = fact.get("model", "?")
@@ -854,10 +859,8 @@ def generate_lens_content(claims, lens, prompt_text, story_titles, ai_make,
 
 def get_prompt_text(container):
     """Return the original prompt text from the container (data[0].prompt), or ''."""
-    data = container.get("data", [])
-    if data and isinstance(data[0], dict):
-        return data[0].get("prompt", "") or ""
-    return ""
+    from _report_signals import get_prompt_text as resolved_prompt
+    return resolved_prompt(container)
 
 
 # ── Chart ─────────────────────────────────────────────────────────────────────
@@ -1131,7 +1134,11 @@ def main():
         print(f"An unexpected error occurred: {e}")
         sys.exit(1)
 
-    stories   = container.get("story", [])
+    if is_revisioned(container):
+        container['_selected_report_indices'] = selected_indices(container, args.story)
+        if lens:
+            args.story = single_index(container, args.story)
+    stories   = [container['story'][i] for i in selected_indices(container, args.story)]
     has_facts = any(
         isinstance(fact.get("counts"), list) and len(fact["counts"]) >= 5
         for s in stories

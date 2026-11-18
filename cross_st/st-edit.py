@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-st-edit — Edit or view story fields in a container
+st-edit — Edit or view report fields in a container
 
 ```
-st-edit subject.json                    # edit story 1 in $EDITOR
-st-edit -s 2 subject.json              # edit story 2
-st-edit --field markdown subject.json  # edit the markdown field
-st-edit --view subject.json            # view without editing
+st-edit subject.json                    # edit active report in $EDITOR
+st-edit -s 2 subject.json              # edit report 2
+st-edit --markdown subject.json        # edit the Markdown body
+st-edit --view-only subject.json       # view without editing
 ```
 
-Options: -s story  --field  --view  -v  -q
+Options: -s report  --markdown  --text  --title  --spoken  --view  --view-only  -v  -q
 """
 
 import argparse
@@ -21,7 +21,45 @@ import tempfile
 import threading
 import time
 import subprocess
+from _report_revisions import (RevisionError, is_revisioned, load_snapshot, selected_indices,
+    render_report, report_body, commit_manual, atomic_write, content_digest)
 from mmd_startup import load_cross_env, require_config
+
+
+
+def _manual_report(parent, field, updated):
+    """Rebuild derived fields from the chosen source without carrying stale checks."""
+    from mmd_process_report import remove_markdown, get_hashtags, clean_newlines_preserve_paragraphs
+    from mmd_for_speaking import for_speaking
+    body = report_body(parent)
+    if field in ("markdown", "text"):
+        body = updated
+    plain = clean_newlines_preserve_paragraphs(remove_markdown(body))
+    return {"make": parent.get("make", "human"), "model": parent.get("model", ""),
+            "title": updated if field == "title" else parent.get("title", ""),
+            "markdown": body, "text": plain,
+            "spoken": updated if field == "spoken" else for_speaking(plain, False),
+            "hashtags": get_hashtags(body), "role": "author", "edited_by": "human",
+            "attribution": parent.get("attribution", ""), "fact": []}
+
+
+def _save_edit(path, container, fingerprint, report_index, field, updated, fact_index=None):
+    """Persist an edit with CAS; report edits create successors once tracking exists."""
+    report = container["story"][report_index]
+    if not updated.strip():
+        raise RevisionError("Empty edited content; nothing saved.")
+    if fact_index is not None:
+        fact = report["fact"][fact_index]
+        fact["report"] = updated
+        if is_revisioned(container):
+            fact.update(report_id=report["report_id"], content_sha256=content_digest(report), manually_edited=True)
+        atomic_write(path, container, fingerprint)
+        return container, report_index
+    if is_revisioned(container):
+        return commit_manual(path, fingerprint, report_index, _manual_report(report, field, updated), field)
+    report[field] = updated
+    atomic_write(path, container, fingerprint)
+    return container, report_index
 
 
 def main():
@@ -29,15 +67,15 @@ def main():
     load_cross_env()
     parser = argparse.ArgumentParser(
         prog='st-edit',
-        description='Edit or view the title, text, markdown, or spoken text of a story.'
+        description='Edit or view report fields. Tracked report edits create a new revision.'
                     '\nRun st-gen first.')
 
     # A json file is required
     parser.add_argument('json_file', type=str,
                         help='Path to the JSON file', metavar='file.json')
     # Data selection is optional, default select data 1
-    parser.add_argument('-s', '--story', type=int, default=1,
-                        help='Story data selected (integer), default 1')
+    parser.add_argument('-s', '--story', type=int, default=None,
+                        help='Report index; default active report, or report 1 for legacy containers')
     parser.add_argument('-f', '--fact', type=int,
                         help='Fact-check to edit (integer), default None')
     parser.add_argument('-spoken', '--spoken', action='store_true',
@@ -73,8 +111,7 @@ def main():
     if args.fact is not None:
         edit_list.append("fact")
     if len(edit_list) == 0:
-        print("Nothing to do")
-        sys.exit(0)
+        edit_list.append("markdown")
     if len(edit_list) != 1:
         print(f"Only one edit at a time please: {edit_list}")
         sys.exit(0)
@@ -84,8 +121,7 @@ def main():
             print(f"Error: The file {args.json_file} does not exist.")
             sys.exit(1)
 
-        with open(file_json, 'r') as file:
-            main_container = json.load(file)
+        main_container, file_fingerprint = load_snapshot(file_json)
 
         if args.verbose:
             print(f"Story container {file_json} successfully read.")
@@ -97,7 +133,17 @@ def main():
         print(f"An unexpected error occurred: {e}")
         sys.exit(1)
 
-    story_index = args.story - 1  # Starts at 1, not 0
+    try:
+        candidates = selected_indices(main_container, args.story)
+        if not candidates:
+            raise RevisionError("Container has no reports.")
+        if is_revisioned(main_container) and len(candidates) != 1:
+            raise RevisionError("Several active reports; select one with -s N.")
+        story_index = candidates[0]
+        args.story = story_index + 1
+    except RevisionError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
     stories = main_container.get("story", [])
     if not stories or story_index >= len(stories) or story_index < 0:
         print(f"No such story: {story_index + 1}")
@@ -126,11 +172,16 @@ def main():
             text_to_edit = fact_obj.get("report")
         else:
             print(f"Fact item out of range {args.fact}")
+            sys.exit(1)
     else:
-        text_to_edit = story[item]
+        text_to_edit = story.get(item, "")
+        if is_revisioned(main_container) and item == "markdown":
+            text_to_edit = report_body(story)
+        if args.view_only and item in ("markdown", "text"):
+            text_to_edit = render_report(story, item)
 
     # Record the hash, to determine if any mods are made and disk write is necessary
-    md5_hash = hashlib.md5(text_to_edit.encode('utf-8')).hexdigest()
+    md5_hash = hashlib.md5(text_to_edit.strip().encode('utf-8')).hexdigest()
 
     # Create a temporary file that persists after closing
     with tempfile.NamedTemporaryFile(mode="w+", delete=False) as temp_file:
@@ -147,7 +198,7 @@ def main():
     import shutil as _shutil
     import subprocess as _sp_grip
     _grip_bin = _shutil.which("grip") or os.path.join(os.path.dirname(sys.executable), "grip")
-    if not os.path.isfile(_grip_bin):
+    if (args.view or args.view_only) and not os.path.isfile(_grip_bin):
         print("  grip not installed — installing now (one-time, ~2 MB)…", flush=True)
         _install = _sp_grip.run(
             [sys.executable, "-m", "pip", "install", "--quiet", "grip"],
@@ -341,7 +392,8 @@ def main():
         try:
             time.sleep(1)  # Brief pause so grip is ready before vi opens
             editor_was_active = True
-            subprocess.run([os.getenv("EDITOR", "vi"), temp_path])
+            import shlex
+            editor_result = subprocess.run(shlex.split(os.getenv("EDITOR", "vi")) + [temp_path])
 
         finally:
             if grip_process is not None:
@@ -350,7 +402,12 @@ def main():
                 grip_process.kill()
     else:  # Edit only
         editor_was_active = True
-        subprocess.run([os.getenv("EDITOR", "vi"), temp_path])
+        import shlex
+        editor_result = subprocess.run(shlex.split(os.getenv("EDITOR", "vi")) + [temp_path])
+
+    if editor_was_active and editor_result.returncode != 0:
+        print(f"Editor exited without saving to the container. Draft retained: {temp_path}", file=sys.stderr)
+        sys.exit(1)
 
     if editor_was_active:
         # Editing is complete, read updated content
@@ -358,24 +415,23 @@ def main():
             updated_content = temp_file.read()
         updated_content = updated_content.strip()  # vi adds unwanted \n
 
-        os.remove(temp_path)  # Clean up temporary file
 
         # Test if the content changed
         updated_md5_hash = hashlib.md5(updated_content.encode('utf-8')).hexdigest()
         if updated_md5_hash != md5_hash:
-            # Save content to the in-memory container
-            if args.fact is not None:
-                # data by reference updates the specific story fact item
-                fact_obj["report"] = updated_content
-            else:
-                story[item] = updated_content
-            # Save container back to disk
-            with open(file_json, 'w', encoding='utf-8') as f:
-                json.dump(main_container, f, ensure_ascii=False, indent=4)
+            try:
+                main_container, saved_index = _save_edit(
+                    file_json, main_container, file_fingerprint, story_index, item,
+                    updated_content, args.fact - 1 if args.fact is not None else None)
+            except (ValueError, OSError) as exc:
+                print(f"Error: {exc}\nEdited draft retained: {temp_path}", file=sys.stderr)
+                sys.exit(1)
+            os.remove(temp_path)
 
             if not args.quiet:
                 print(f"Container updated: {file_json}")
         else:
+            os.remove(temp_path)
             if not args.quiet:
                 print(f"Container unchanged: {file_json}")
 

@@ -18,6 +18,9 @@ import json
 import os
 import sys
 import time
+from _report_revisions import selected_indices, is_revisioned
+from _report_revisions import save_legacy
+from _revision_compat import guard_legacy_path
 from mmd_startup import load_cross_env, require_config
 from pathlib import Path
 from statistics import mean, median, stdev
@@ -44,7 +47,10 @@ def extract_generation_timing(container):
     Returns: list of dicts with keys: ai, model, elapsed, tokens_total, tok_per_sec, cached
     """
     results = []
+    active_data_ids = {container['story'][i].get('source_data_id') for i in selected_indices(container)}
     for entry in container.get("data", []):
+        if is_revisioned(container) and entry.get('data_id') not in active_data_ids:
+            continue
         if "timing" not in entry:
             continue
         
@@ -83,6 +89,8 @@ def extract_fact_check_timing(container):
     """
     results = []
     for story_idx, story in enumerate(container.get("story", []), start=1):
+        if story_idx - 1 not in selected_indices(container):
+            continue
         # Get segment count for this story (number of AI calls per fact-check)
         num_segments = len(story.get("segments", []))
         
@@ -646,6 +654,7 @@ def save_story_to_container(container, file_path, story_text, ai_make, ai_model,
     Returns:
         int: Story index, or -1 if failed
     """
+    guard_legacy_path(file_path, "st-speed report generation")
     import time
     
     try:
@@ -676,8 +685,7 @@ def save_story_to_container(container, file_path, story_text, ai_make, ai_model,
         story_index = len(container["story"])
         
         # Save container
-        with open(file_path, 'w') as f:
-            json.dump(container, f, indent=2)
+        save_legacy(file_path, container)
         
         return story_index
         
@@ -859,6 +867,8 @@ def main():
     # Load container(s)
     containers = []
     for file_path in args.json_file:
+        if args.ai_story:
+            guard_legacy_path(file_path, "st-speed report generation")
         container = load_container(file_path)
         if container:
             containers.append((file_path, container))

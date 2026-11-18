@@ -50,6 +50,8 @@ import json
 import os
 import subprocess
 import sys
+from _report_revisions import save_legacy
+from _revision_compat import guard_legacy_path
 from mmd_startup import load_cross_env, require_config
 
 
@@ -335,6 +337,11 @@ def main():
 
     file_prefix = args.json_file.rsplit('.', 1)[0]
     file_json   = file_prefix + ".json"
+    try:
+        guard_legacy_path(file_json, "st-fetch")
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
 
     load_cross_env()
 
@@ -454,10 +461,7 @@ def main():
 
     # ── Save container ────────────────────────────────────────────────────────
     if container_modified:
-        with open(file_json, 'w', encoding='utf-8') as f:
-            json.dump(container, f, ensure_ascii=False, indent=4)
-            f.flush()
-            os.fsync(f.fileno())
+        save_legacy(file_json, container)
         if not args.quiet:
             print(f"  Container updated: {file_json}")
 

@@ -29,6 +29,7 @@ import argparse
 import json
 import os
 import sys
+from _report_revisions import selected_indices
 from mmd_startup import load_cross_env, require_config
 from pathlib import Path
 
@@ -57,7 +58,8 @@ def valid_directory(path_str):
 def extract_story_titles(container):
     """Return a compact make/model: title list from the container."""
     lines = []
-    for s in container.get("story", []):
+    for index in container.get("_selected_report_indices", selected_indices(container)):
+        s = container["story"][index]
         make  = s.get("make",  "?")
         model = s.get("model", "?")
         title = s.get("title", "")[:90]
@@ -323,7 +325,7 @@ def main():
         sys.exit(1)
 
     # Validate fact-check data
-    stories   = container.get("story", [])
+    stories = [container["story"][i] for i in selected_indices(container)]
     has_facts = any(
         isinstance(fact.get("counts"), list) and len(fact["counts"]) >= 5
         for s in stories

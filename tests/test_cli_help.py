@@ -79,6 +79,7 @@ _COMMANDS = [
     "st-speak",
     "st-speed",
     "st-stones",
+    "st-update",
     "st-verdict",
     "st-voice",
 ]

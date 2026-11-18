@@ -17,6 +17,7 @@ import argparse
 import json
 import os
 import shutil
+import shlex
 import subprocess
 import sys
 
@@ -77,12 +78,11 @@ cat_sel = _default_cat_for(_active_site_dict())  # Session-level post category
 
 # Commands that mutate the .json container — state is re-read after these run.
 # st.py builds and fires the command; the st-* tool owns all the logic.
-# Note: st-edit is intentionally excluded — view-only and edit operations do not
-# require a container refresh, and refreshing would reset story_sel to 1.
+# Revision-aware edits and updates can change the active report.
 POST_CMD_REFRESH = {
     "st-gen", "st-prep", "st-bang", "st-merge",
     "st-fact", "st-cross", "st-analyze",
-    "st-fix", "st-rm",
+    "st-fix", "st-rm", "st-update", "st-edit",
 }
 
 menus = {
@@ -104,6 +104,7 @@ menus = {
             "f": "List fact-checks",
         }),
         "e": ("Edit", {
+            "u": "Update report with review",
             "T": "Edit title",
             "m": "Edit markdown",
             "M": "Edit markdown with browser view",
@@ -208,7 +209,9 @@ def initialize_state():
     """First-run setup — resets story_sel and fact_sel to 1 (or None)."""
     global main_container, story_sel, fact_sel
     refresh_main_container()
-    story_sel = 1 if main_container.get('story') else None
+    from _report_revisions import selected_indices
+    indices = selected_indices(main_container)
+    story_sel = indices[0] + 1 if indices else None
     facts = main_container['story'][story_sel - 1].get('fact', []) if story_sel else []
     fact_sel = 1 if facts else None
 
@@ -228,6 +231,11 @@ def refresh_state():
         story_sel = None
         fact_sel = None
         return
+
+    from _report_revisions import is_revisioned, selected_indices
+    if is_revisioned(main_container):
+        indices = selected_indices(main_container)
+        story_sel = indices[0] + 1 if indices else None
 
     # Clamp story_sel only if it's out of range or unset
     if story_sel is None or story_sel > n_stories:
@@ -308,6 +316,8 @@ def execute_menu(menu_name, choice):
 
         case "Edit":
             match choice:
+                case "u":
+                    cmd = f"st-update --agent {shlex.quote(ai)} -s {story_sel} {shlex.quote(file_json)}"
                 case "T":
                     cmd = f"st-edit --title -s {story_sel} {file_json}"
                 case "m":
@@ -536,7 +546,7 @@ def main():
         elif key == "RETURN":
             if cmd != "":
                 print(f"\n\nExecuting command: {cmd}")
-                cmd_split = cmd.split()
+                cmd_split = shlex.split(cmd)
                 cmd = ""
                 try:
                     subprocess.run(cmd_split)

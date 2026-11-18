@@ -58,3 +58,7 @@ st-merge --no-cache subject.json              # bypass API cache
 ## For developers
 
 Two modes selected automatically: `simple` (no fact data — all stories passed to synthesizer AI) and `quality` (uses fact scores — highest-scoring story is the base; its author AI performs the rewrite for consistent voice). Override with `--simple` or `--quality`.
+
+For revisioned containers, merging creates a successor linked to all selected
+parents. Default selection uses active candidates; explicit indices can select
+historical reports. Earlier content and checks remain intact. See [st-update](st-update).

@@ -1,3 +1,4 @@
+from _report_revisions import selected_indices, is_revisioned
 #!/usr/bin/env python3
 
 import json
@@ -157,7 +158,8 @@ def get_flattened_fc_data_simple(data):
     # Requires N stories with exactly N facts each
     model_max_chars = 17
     flattened_data = []
-    for story in data["story"]:
+    for index in data.get("_selected_report_indices", selected_indices(data)):
+        story = data["story"][index]
         evaluator_make = story["make"]
         evaluator_model = story["model"][:model_max_chars]
         for fact in story["fact"]:
@@ -179,7 +181,7 @@ def get_flattened_fc_data_simple(data):
                 "false_count": _c[4],
                 "unknown_count": _c[5],
                 "score": fact["score"],
-                "summary": fact["summary"]  # Optional, included for reference
+                "summary": fact.get("summary", "")  # Optional, included for reference
             })
     return flattened_data
 
@@ -213,13 +215,19 @@ Efficient: Prioritizes targets with higher coverage to maximize the chance of fi
     :param data:
     :return: square data set
     """
+    if is_revisioned(data):
+        # A revision can contain one author and many checkers: retain the
+        # rectangular matrix instead of silently dropping checker columns.
+        return get_flattened_fc_data_simple(data)
     model_max_chars = 17
     # Step 1: Collect all fact-check data and track targets per story
-    story_data = []
+    story_data = {}
     all_targets = set()  # Unique target make:model pairs
     story_target_counts = {}  # Story ID -> set of targets it evaluates
 
     for idx, story in enumerate(data["story"]):
+        if idx not in data.get("_selected_report_indices", selected_indices(data)):
+            continue
         evaluator_make = story["make"]
         evaluator_model = story["model"][:model_max_chars]
         story_targets = set()
@@ -248,7 +256,7 @@ Efficient: Prioritizes targets with higher coverage to maximize the chance of fi
                 "summary": fact.get("summary", "")
             })
 
-        story_data.append(story_facts)
+        story_data[idx] = story_facts
         story_target_counts[idx] = story_targets
 
     # Step 2: Determine the largest possible square

@@ -44,6 +44,7 @@ import os
 import pandas as pd
 import seaborn as sns
 import sys
+from _report_revisions import selected_indices
 from mmd_startup import load_cross_env, require_config
 
 from mmd_plot import get_plot_list, show_plot
@@ -327,7 +328,7 @@ def main():
     load_cross_env()
 
     # Validate fact-check data
-    stories = main_container.get("story", [])
+    stories = [main_container["story"][i] for i in selected_indices(main_container)]
     has_facts = any(len(s.get("fact", [])) > 0 for s in stories)
     if not has_facts:
         print(f"No fact-check data found in {file_json}.")

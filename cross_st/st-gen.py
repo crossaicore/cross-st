@@ -27,6 +27,8 @@ import os
 import subprocess
 import sys
 import time
+from _report_revisions import save_legacy
+from _revision_compat import guard_legacy_path
 from mmd_startup import require_config, load_cross_env
 
 from ai_handler import process_prompt, get_ai_list, get_ai_model, get_default_ai, get_usage, check_api_key, get_content_auto
@@ -170,6 +172,11 @@ def main():
         create_block_file(tmp_safe_name(file_json), args.verbose)
     else:
         file_json = file_prefix + ".json"
+    try:
+        guard_legacy_path(file_json, "st-gen")
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
 
     # Resolve the model up-front so progress messages can name it.
     # get_ai_model() handles agent-name resolution (alias → make/model).
@@ -322,12 +329,7 @@ def main():
             print("Added new data")
 
     # Atomic write — prevents corruption when multiple st-gen processes run in parallel
-    tmp_json = file_json + ".tmp"
-    with open(tmp_json, 'w', encoding='utf-8') as f:
-        json.dump(main_container, f, ensure_ascii=False, indent=4)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp_json, file_json)
+    save_legacy(file_json, main_container)
 
     data_select = len(main_container["data"])  # last on the list
     # Set up to use more recent generation, even if it is a duplicate,

@@ -50,6 +50,7 @@ import argparse
 import json
 import os
 import sys
+from _report_revisions import selected_indices, version_label
 from mmd_startup import require_config
 from tabulate import tabulate
 
@@ -139,6 +140,7 @@ def main():
                 story_data.append([i, make, model, title[:args.clip]])
             print(tabulate(story_data, headers=["D", "Make", "Model", "Raw Title"], tablefmt="github"))
 
+    visible_indices = set(selected_indices(main_container))
     stories = main_container.get("story", [])
 
     if not stories:
@@ -164,6 +166,8 @@ def main():
         story_data = []
         fact_data = []
         for i, story in enumerate(main_container["story"], start=1):
+            if i - 1 not in visible_indices:
+                continue
             fix_mode   = story.get("fix_mode", "")
             merge_mode = story.get("merge_mode", "")
 
@@ -210,7 +214,7 @@ def main():
                 i,
                 story.get("make"),
                 story.get("model")[:model_clip],
-                flag,
+                version_label(story) or flag,
                 segs_str,
                 avg_score_str,
                 story.get("title")[:args.clip]
@@ -256,6 +260,8 @@ def main():
             print(f"{newline}CLAIMS")
             newline = "\n"
             for i, story in enumerate(main_container["story"], start=1):
+                if i - 1 not in visible_indices:
+                    continue
                 facts = story.get("fact", [])
                 if not facts:
                     continue

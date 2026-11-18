@@ -23,6 +23,8 @@ import argparse
 import json
 import os
 import sys
+from _report_revisions import save_legacy
+from _revision_compat import guard_legacy_path
 from mmd_startup import require_config
 
 
@@ -62,6 +64,11 @@ def main():
 
     file_prefix = args.json_file.rsplit('.', 1)[0]  # Split from the right, only once
     file_json = file_prefix + ".json"
+    try:
+        guard_legacy_path(file_json, "st-rm")
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
     main_container_updated = False
 
     try:
@@ -166,8 +173,7 @@ def main():
             sys.exit(1)
 
     if main_container_updated:
-        with open(file_json, 'w', encoding='utf-8') as f:
-            json.dump(main_container, f, ensure_ascii=False, indent=4)
+        save_legacy(file_json, main_container)
         if not args.quiet:
             print(f"Container updated: {file_json}")
 

@@ -53,6 +53,8 @@ from mmd_for_speaking import for_speaking
 from mmd_process_report import remove_markdown, remove_story_break, get_hashtags, remove_hashtags, \
     clean_newlines_preserve_paragraphs, extract_title, edit_title
 from mmd_util import build_segments
+from _report_revisions import (is_revisioned, load_snapshot, selected_indices, report_body,
+                               effective_prompt, effective_brief, commit_successor, save_legacy)
 from mmd_startup import load_cross_env, require_config
 
 
@@ -576,8 +578,7 @@ def main():
         if not os.path.isfile(file_json):
             print(f"Error: The file {args.json_file} does not exist.")
             sys.exit(1)
-        with open(file_json, 'r') as file:
-            main_container = json.load(file)
+        main_container, revision_fingerprint = load_snapshot(file_json)
     except json.JSONDecodeError:
         print(f"Error: The file {file_json} contains invalid JSON.")
         sys.exit(1)
@@ -590,6 +591,11 @@ def main():
         sys.exit(1)
 
     story_list = main_container["story"]
+    revisioned = is_revisioned(main_container)
+    if revisioned and args.stories is None and not args.all:
+        args.stories = [i + 1 for i in selected_indices(main_container)]
+        if len(args.stories) < 2:
+            parser.error("Only one active report is available. Use --stories N M to select historical inputs explicitly.")
     if args.all:
         args.stories = list(range(1, len(story_list) + 1))
     elif args.stories is None:
@@ -606,6 +612,12 @@ def main():
             print("Error: fewer than 2 original stories found. "
                   "Use --stories to specify manually or --all to include all.")
             sys.exit(1)
+
+    if any(i < 1 or i > len(story_list) for i in args.stories):
+        parser.error("A selected report index is out of range.")
+    args.stories = list(dict.fromkeys(args.stories))
+    if len(args.stories) < 2:
+        parser.error("Merge requires at least two distinct reports.")
 
     # ── Apply --min-score filter ──────────────────────────────────────────────
     if args.min_score is not None:
@@ -636,7 +648,9 @@ def main():
 
     for story_i in args.stories:
         if 1 <= story_i <= len(story_list):
-            story_entry = story_list[story_i - 1]
+            story_entry = dict(story_list[story_i - 1])
+            if revisioned:
+                story_entry["markdown"] = report_body(story_entry)
             stories_with_indices.append((story_i, story_entry))
             reports.append(story_entry["markdown"])
             make = story_entry["make"]
@@ -685,7 +699,7 @@ def main():
     # ── Auto-select base story ────────────────────────────────────────────────
     if args.base is not None:
         base_story_i = args.base
-        if not (1 <= base_story_i <= len(story_list)):
+        if base_story_i not in args.stories:
             print(f"Error: --base {base_story_i} is out of range.")
             sys.exit(1)
     else:
@@ -716,7 +730,9 @@ def main():
     # ── Load original prompt for context ─────────────────────────────────────
     context_prompt = ""
     try:
-        if not os.path.isfile(file_prompt):
+        if revisioned:
+            context_prompt = effective_prompt(main_container, base_story_i - 1) or ""
+        elif not os.path.isfile(file_prompt):
             if not args.quiet:
                 print(f"  Note: {file_prompt} not found — proceeding without original prompt context")
         else:
@@ -761,7 +777,7 @@ def main():
     # ── Build data entry ──────────────────────────────────────────────────────
     data = {
         "make": args.agent,
-        "model": get_ai_model(args.agent),
+        "model": ai_model,
         "prompt": prompt,
         "gen_payload": gen_payload,
         "gen_response": response,
@@ -790,7 +806,9 @@ def main():
     # ── Build story entry ─────────────────────────────────────────────────────
     all_raw_story_text = get_content_auto(response)
     make = args.agent
-    model = get_ai_model(make)
+    model = ai_model
+    if not isinstance(all_raw_story_text, str) or not all_raw_story_text.strip():
+        parser.error("The AI returned an empty report; nothing was saved.")
 
     file_md_content = remove_story_break(all_raw_story_text)
     select_hashtags = get_hashtags(file_md_content)
@@ -801,8 +819,9 @@ def main():
 
     ai_tag_reading = merge_credit + "\n  " + get_tagline_for_reading(make, model) + "\n  "
     clean_paragraphs = clean_newlines_preserve_paragraphs(no_md)
-    file_txt_content = clean_paragraphs + "\n\n" + ai_tag_reading
-    file_md_content += "\n\n" + ai_tag_reading
+    file_txt_content = clean_paragraphs if revisioned else clean_paragraphs + "\n\n" + ai_tag_reading
+    if not revisioned:
+        file_md_content += "\n\n" + ai_tag_reading
 
     file_title_content = extract_title(file_txt_content)
     file_title_content = edit_title(file_title_content)
@@ -823,32 +842,48 @@ def main():
     md5_hash = hashlib.md5(story_str.encode('utf-8')).hexdigest()
     story["md5_hash"] = md5_hash
 
-    if "story" not in main_container:
-        main_container["story"] = []
-
-    duplicate_index = None
-    for index, existing_story in enumerate(main_container["story"], start=1):
-        existing_hash = existing_story.get("md5_hash")
-        if existing_hash == md5_hash:
-            duplicate_index = index
-            break
-    if duplicate_index is None:
-        main_container["story"].append(story)
+    if revisioned:
+        from _update_plan import _save_unique
+        from pathlib import Path
+        story["attribution"] = ai_tag_reading.strip()
+        recovery = _save_unique({"kind": "merge", "report": story, "raw_data": data},
+                               Path(file_json).resolve().parent / ".cross-update", ".attempt", "merge")
+        try:
+            main_container, merged_index = commit_successor(
+                file_json, revision_fingerprint, [i - 1 for i in args.stories], story, data,
+                kind="merge", change_request=f"Merge selected reports using {mode} mode.",
+                effective_brief=effective_brief(main_container, base_story_i - 1),
+                provenance={"mode": mode, "base_index": base_story_i, "recovery_path": str(recovery)})
+        except ValueError as exc:
+            parser.error(f"{exc} Generated merge retained at {recovery}")
+        story_num = merged_index + 1
         container_modified = True
-        story_num = len(main_container["story"])
         if not args.quiet:
-            print(f"  Added merged story as story {story_num}  (mode: {mode})")
+            print(f"  Added merged report {story_num}; earlier versions retained.")
     else:
-        if not args.quiet:
-            print("  Merged story already exists — not adding duplicate")
+        if "story" not in main_container:
+            main_container["story"] = []
 
-    if container_modified:
-        with open(file_json, 'w', encoding='utf-8') as f:
-            json.dump(main_container, f, ensure_ascii=False, indent=4)
-            f.flush()
-            os.fsync(f.fileno())
-        if not args.quiet:
-            print(f"  Container updated: {file_json}")
+        duplicate_index = None
+        for index, existing_story in enumerate(main_container["story"], start=1):
+            existing_hash = existing_story.get("md5_hash")
+            if existing_hash == md5_hash:
+                duplicate_index = index
+                break
+        if duplicate_index is None:
+            main_container["story"].append(story)
+            container_modified = True
+            story_num = len(main_container["story"])
+            if not args.quiet:
+                print(f"  Added merged story as story {story_num}  (mode: {mode})")
+        else:
+            if not args.quiet:
+                print("  Merged story already exists — not adding duplicate")
+
+        if container_modified:
+            save_legacy(file_json, main_container)
+            if not args.quiet:
+                print(f"  Container updated: {file_json}")
 
     # ── Optional post-merge fact-check ────────────────────────────────────────
     if container_modified and args.post_check and mode == "quality":

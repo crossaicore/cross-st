@@ -209,6 +209,8 @@ import subprocess
 import re
 import sys
 from datetime import datetime, timezone
+from _report_revisions import (is_revisioned, load_snapshot, selected_indices, report_body,
+                               effective_prompt, effective_brief, commit_successor, save_legacy)
 from mmd_startup import load_cross_env, require_config
 import difflib
 import threading
@@ -1159,6 +1161,45 @@ def _save_result(container, file_json, args,
     data_str = json.dumps(data, sort_keys=True)
     data["md5_hash"] = hashlib.md5(data_str.encode()).hexdigest()
 
+    if is_revisioned(container):
+        from mmd_process_report import get_hashtags, clean_newlines_preserve_paragraphs
+        from mmd_for_speaking import for_speaking
+        from mmd_branding import get_speaking_tagline, get_tagline_for_reading
+        from _update_plan import _save_unique
+        from pathlib import Path
+        plain = clean_newlines_preserve_paragraphs(remove_markdown(revised_text))
+        successor = {
+            "make": args.agent, "model": fc_ai_model, "fixed_by": args.agent,
+            "fix_mode": args.mode, "title": original_story.get("title", ""),
+            "markdown": revised_text, "text": plain,
+            "spoken": for_speaking(plain, False) + "\n\n" + get_speaking_tagline(_gen_make, fc_ai_model),
+            "attribution": get_tagline_for_reading(_gen_make, fc_ai_model),
+            "hashtags": get_hashtags(revised_text), "fact": [],
+            "_generated_by": {"tool": "st-fix", "mode": args.mode,
+                              "source_s": args.story, "source_f": args.fact,
+                              "rewriter": args.agent},
+        }
+        recovery = _save_unique({"kind": "fix", "report": successor, "raw_data": data},
+                               Path(file_json).resolve().parent / ".cross-update", ".attempt", "fix")
+        try:
+            _, index = commit_successor(
+                file_json, args._revision_fingerprint, [args.story - 1], successor, data,
+                kind="fix", change_request=f"Apply {args.mode} corrections from fact-check {args.fact}.",
+                effective_brief=effective_brief(container, args.story - 1),
+                provenance={"mode": args.mode, "source_fact": args.fact, "recovery_path": str(recovery)})
+        except ValueError as exc:
+            raise ValueError(f"{exc} Generated correction retained at {recovery}") from exc
+        story_index = index + 1
+        if not args.quiet:
+            print(f"  Added corrected report {story_index}; earlier versions retained.")
+        # Prepared in-process; st-prep must not append a duplicate candidate.
+        if (not args.quiet and not skip_after_factcheck and before_fact is not None):
+            checker_ai = before_fact.get("make", args.agent)
+            with Spinner(f"  Fact-checking corrected report with {checker_ai}", quiet=False):
+                after_fact = run_after_factcheck(file_json, story_index, checker_ai, args.verbose, args.cache)
+            print_comparison(before_fact, after_fact, n_claims_before)
+        return
+
     dup_data = next((i + 1 for i, d in enumerate(container.get("data", []))
                      if d.get("md5_hash") == data["md5_hash"]), None)
     data_index = dup_data
@@ -1209,10 +1250,7 @@ def _save_result(container, file_json, args,
             print(f"  Identical result already exists as story {story_index} — no change.")
 
     if container_modified:
-        with open(file_json, 'w', encoding='utf-8') as f:
-            json.dump(container, f, ensure_ascii=False, indent=4)
-            f.flush()
-            os.fsync(f.fileno())
+        save_legacy(file_json, container)
         if not args.quiet:
             print(f"  Container updated: {file_json}")
         if args.prep and data_index:
@@ -1293,14 +1331,25 @@ Modes:
         if not os.path.isfile(file_json):
             print(f"Error: {file_json} does not exist.")
             sys.exit(1)
-        with open(file_json, 'r') as f:
-            container = json.load(f)
-    except json.JSONDecodeError:
+        container, args._revision_fingerprint = load_snapshot(file_json)
+    except (json.JSONDecodeError, ValueError):
         print(f"Error: {file_json} contains invalid JSON.")
         sys.exit(1)
 
     stories = container.get("story", [])
     n_stories = len(stories)
+    revisioned = is_revisioned(container)
+    if revisioned and args.mode in {"best-source", "synthesize"}:
+        parser.error("Revisioned containers support st-fix --mode iterate or patch; "
+                     "use st-merge --stories for explicit multi-report synthesis.")
+    try:
+        eligible_indices = set(selected_indices(container, args.story))
+    except ValueError as exc:
+        parser.error(str(exc))
+    if revisioned and args.story is None and args.fact is not None:
+        if len(eligible_indices) != 1:
+            parser.error("Several active reports exist; select one with -s N.")
+        args.story = next(iter(eligible_indices)) + 1
 
     # ── Build ranked fixable table ────────────────────────────────────────────
     #
@@ -1387,6 +1436,8 @@ Modes:
         verifications = ["False", "Partially_false"]
         rows = []
         for si, s in enumerate(stories, 1):
+            if revisioned and si - 1 not in eligible_indices:
+                continue
             if not include_fixed and s.get("_generated_by"):
                 continue
             for fi, f in enumerate(s.get("fact", []), 1):
@@ -1481,7 +1532,7 @@ Modes:
 
     # Apply defaults of 1 if still None (synthesize mode or explicit partial args)
     if args.story is None:
-        args.story = 1
+        args.story = min(eligible_indices) + 1 if revisioned and eligible_indices else 1
     if args.fact is None:
         args.fact  = 1
 
@@ -1492,7 +1543,7 @@ Modes:
     primary = stories[args.story - 1]
     primary_make  = primary["make"]
     primary_model = primary["model"]
-    primary_text  = primary.get("markdown", "")
+    primary_text = report_body(primary) if revisioned else primary.get("markdown", "")
 
     # ── Resolve rewriter AI ───────────────────────────────────────────────────
     # Default to the story's own AI (same voice, better results).

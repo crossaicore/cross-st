@@ -20,6 +20,7 @@ Live display: a 2D ANSI table updated every second.
 Press Ctrl+C at any time to cancel; results collected so far are preserved.
 """
 
+import concurrent.futures
 import argparse
 import json
 import os
@@ -28,6 +29,8 @@ import subprocess
 import sys
 import threading
 import time
+from _report_revisions import is_revisioned, load_snapshot, selected_indices, save_legacy
+from _revision_compat import clear_selected_facts
 from mmd_startup import require_config
 from pathlib import Path
 
@@ -298,11 +301,7 @@ def _ensure_segments(file_json: str, n_stories: int, quiet: bool = False) -> Non
     if not changed:
         return
 
-    tmp = file_json + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(container, f, ensure_ascii=False, indent=4)
-        f.flush(); os.fsync(f.fileno())
-    os.replace(tmp, file_json)
+    save_legacy(file_json, container)
     if not quiet:
         built = sum(1 for s in container.get("story", [])[:n_stories] if s.get("segments"))
         print(f"  Segments built for {_clr(built, GREEN, BOLD)} stories.")
@@ -386,6 +385,68 @@ def _filter_agents_by_key(ai_list: list) -> "tuple[list, list]":
     return kept, dropped
 
 
+def _cross_revisions(args, file_json, ai_list):
+    """Check selected revisions without generating missing author candidates."""
+    container, _ = load_snapshot(file_json)
+    indices = selected_indices(container, args.story)
+    if not ai_list:
+        raise ValueError("No configured checker agents with available credentials.")
+    tasks = []
+    for index in indices:
+        report = container['story'][index]
+        for agent in ai_list:
+            done = any(
+                not fact.get('_truncated') and not fact.get('_error')
+                and fact.get('make') == get_ai_make(agent)
+                and fact.get('model') == get_ai_model(agent)
+                and fact.get('report_id') == report.get('report_id')
+                and fact.get('content_sha256') == report.get('content_sha256')
+                for fact in report.get('fact', [])
+            )
+            if not args.force and done:
+                continue
+            tasks.append((index, agent))
+    if args.dry_run:
+        total = len(indices) * len(ai_list)
+        print(f"Revision check: reports {[i + 1 for i in indices]}, "
+              f"{len(ai_list)} checker(s), {total} cells: "
+              f"{len(tasks)} pending, {total - len(tasks)} complete. No changes made.")
+        return
+    if args.force:
+        expected_reports = {index: (container['story'][index].get('report_id'),
+                                    container['story'][index].get('content_sha256'))
+                            for index in indices} if is_revisioned(container) else None
+        count = clear_selected_facts(file_json, indices, expected_reports)
+        if not args.quiet:
+            print(f"  Cleared {count} findings from selected reports only.", flush=True)
+    def run(task):
+        index, agent = task
+        cmd = [sys.executable, os.path.join(os.path.dirname(__file__), 'st-fact.py'),
+               file_json, '-s', str(index + 1), '--agent', agent,
+               '--retry-budget', str(args.retry_budget)]
+        if not args.cache:
+            cmd.append('--no-cache')
+        if args.quiet:
+            cmd.append('--quiet')
+        elif getattr(args, 'verbose', False):
+            cmd.append('--verbose')
+        if not args.quiet:
+            print(f"  Checking report {index + 1} with {agent}…", flush=True)
+        semaphore = _get_provider_semaphore(agent, args.max_concurrency, not args.parallel)
+        with semaphore:
+            try:
+                return subprocess.run(cmd, timeout=args.timeout or None).returncode
+            except subprocess.TimeoutExpired:
+                print(f"  Checker timed out: report {index + 1}, {agent}", file=sys.stderr)
+                return 1
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(tasks))) as executor:
+        failures = sum(bool(result_code) for result_code in executor.map(run, tasks))
+    if failures:
+        raise RuntimeError(f"{failures} revision check(s) failed; completed findings were retained.")
+    if not args.quiet:
+        print(f"  Revision checks complete: {len(tasks)} cells executed.")
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main() -> None:
     require_config()
@@ -399,6 +460,7 @@ def main() -> None:
     )
     parser.add_argument("json_file", type=str, metavar="file.json",
                         help="Path to the JSON container file")
+    parser.add_argument("-s", "--story", type=int, help="Select a report by its original one-based index")
     parser.add_argument("--cache", dest="cache", action="store_true", default=True,
                         help="Enable API cache (default: enabled)")
     parser.add_argument("--no-cache", dest="cache", action="store_false",
@@ -455,6 +517,10 @@ def main() -> None:
                              "--timeout caps the entire cell's wall clock.")
 
     args = parser.parse_args()
+    if args.max_concurrency is not None and args.max_concurrency < 1:
+        parser.error('--max-concurrency must be at least 1')
+    if args.timeout < 0 or args.retry_budget < 0:
+        parser.error('--timeout and --retry-budget must be non-negative')
 
     file_prefix = args.json_file.rsplit(".", 1)[0]
     file_json   = file_prefix + ".json"
@@ -480,6 +546,15 @@ def main() -> None:
         )
     if _kept:
         ai_list = _kept
+    if os.path.exists(file_json):
+        revision_container, _ = load_snapshot(file_json)
+        if is_revisioned(revision_container) or args.story is not None:
+            try:
+                _cross_revisions(args, file_json, _kept)
+            except (ValueError, RuntimeError) as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                sys.exit(1)
+            return
     N       = len(ai_list)
 
     # --dry-run implies --skip-gen: we only preview the Step 2 matrix, and
@@ -689,11 +764,7 @@ def main() -> None:
             except (OSError, json.JSONDecodeError):
                 pass
 
-        tmp_json = file_json + ".tmp"
-        with open(tmp_json, 'w', encoding='utf-8') as f:
-            json.dump(main_container, f, ensure_ascii=False, indent=4)
-            f.flush(); os.fsync(f.fileno())
-        os.replace(tmp_json, file_json)
+        save_legacy(file_json, main_container)
         if not args.quiet:
             if already_present and not merged:
                 print(f"  Merged {merged} new result(s), {already_present} already present → {file_json}")
@@ -759,11 +830,7 @@ def main() -> None:
                 if facts:
                     n_force_cleared += len(facts)
                     story["fact"] = []
-            tmp = file_json + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(container, f, ensure_ascii=False, indent=4)
-                f.flush(); os.fsync(f.fileno())
-            os.replace(tmp, file_json)
+            save_legacy(file_json, container)
         except (OSError, json.JSONDecodeError):
             pass
         if not args.quiet and n_force_cleared:

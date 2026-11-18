@@ -37,6 +37,8 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+from _report_revisions import selected_indices, is_revisioned, render_report
+from _revision_compat import single_index
 from mmd_startup import require_config, load_cross_env
 
 _WEASYPRINT_ERR: str | None = None
@@ -405,7 +407,7 @@ def main():
         help="Path to the story container JSON file",
     )
     parser.add_argument(
-        "-s", "--story", type=int, default=1,
+        "-s", "--story", type=int, default=None,
         help="Story number to print (1-based, default: 1)",
     )
     parser.add_argument(
@@ -460,9 +462,9 @@ def main():
 
     # Determine which stories to process
     if args.all_stories:
-        indices = list(range(1, len(stories) + 1))
+        indices = [i + 1 for i in selected_indices(container)]
     else:
-        idx = args.story
+        idx = single_index(container, args.story)
         if idx < 1 or idx > len(stories):
             print(f"Error: Story {idx} does not exist (container has {len(stories)} stories).")
             sys.exit(1)
@@ -475,7 +477,8 @@ def main():
     explicit_pdf = args.output  # str or None
 
     for story_idx in indices:
-        story = stories[story_idx - 1]
+        story = dict(stories[story_idx - 1])
+        story["markdown"] = render_report(story)
 
         make  = story.get("make", "unknown")
         model = story.get("model", "")

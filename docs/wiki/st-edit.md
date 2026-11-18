@@ -43,3 +43,8 @@ st-edit --view-only subject.json       # view story with Glow (read-only)
 ## For developers
 
 Reads the targeted field from the `story[]` array, writes it to a temp file, opens `$EDITOR`, then writes the saved content back. For `--fact`, reads from `fact[].summary` or the full fact report JSON.
+
+For revisioned containers, editing report content creates a manual successor with
+empty fact checks. The selected earlier version is retained. View-only mode
+shows the version footer. The default is the active report; `-s` selects an
+original container index. See [st-update](st-update).

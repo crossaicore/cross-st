@@ -22,6 +22,8 @@ import argparse
 import json
 import os
 import sys
+from _revision_compat import single_index
+from _report_revisions import is_revisioned, effective_prompt, render_report
 from mmd_startup import require_config
 
 
@@ -32,7 +34,7 @@ def main():
         description="Read elements of a .json container and print to standard out.")
     parser.add_argument('json_file', type=str,
                         help='Path to the JSON file', metavar='file.json')
-    parser.add_argument('-s', '--story', type=int, default=1,
+    parser.add_argument('-s', '--story', type=int, default=None,
                         help='Story number (integer), default: 1')
     parser.add_argument('-f', '--fact', type=int,
                         help='Fact-check report number (integer), default: none')
@@ -84,11 +86,18 @@ def main():
     if args.verbose:
         print(f"Loaded: {file_json}", file=sys.stderr)
 
+    if is_revisioned(main_container) or not args.prompt:
+        args.story = single_index(main_container, args.story)
+    elif args.story is None:
+        args.story = 1
+
     # --prompt is stored inside data[0], not at the top level
     if args.prompt:
         prompt_text = ""
         data = main_container.get("data", [])
-        if data:
+        if is_revisioned(main_container):
+            prompt_text = effective_prompt(main_container, args.story - 1) or ""
+        elif data:
             prompt_text = data[0].get("prompt", "")
         if prompt_text:
             print(prompt_text)
@@ -114,13 +123,13 @@ def main():
         print(select_story.get("title"))
 
     if args.text:
-        print(select_story.get("text"))
+        print(render_report(select_story, "text"))
 
     if args.spoken:
         print(select_story.get("spoken"))
 
     if args.markdown:
-        print(select_story.get("markdown"))
+        print(render_report(select_story))
 
     if args.hashtags:
         print(select_story.get("hashtags"))

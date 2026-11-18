@@ -26,6 +26,8 @@ import subprocess
 import sys
 import threading
 import time
+from _report_revisions import selected_indices, content_digest, is_revisioned, report_body
+from _revision_compat import append_fact
 from mmd_startup import require_config, load_cross_env
 from ai_handler import process_prompt, get_ai_list, get_content_auto, get_ai_make, get_ai_model, \
     get_default_ai, get_usage
@@ -438,20 +440,23 @@ def main():
 
     # Count how many stories we will actually process so the per-story header
     # can show "Story X/N" honestly when --story filters down to one.
-    _stories_to_do = (
-        [args.story] if args.story is not None
-        else list(range(1, len(main_container["story"]) + 1))
-    )
+    _stories_to_do = [index + 1 for index in selected_indices(main_container, args.story)]
     _n_to_do = len(_stories_to_do)
     _done_so_far = 0
+    revision_check_incomplete = False
 
     for story_index, story in enumerate(main_container["story"], start=1):
-        if args.story is not None and args.story != story_index:
+        if story_index not in _stories_to_do:
             continue
         make = story.get("make")
         model = story.get("model")
         title = story.get("title")
         text = story.get("text")
+        checked_digest = content_digest(story)
+        checked_report_id = story.get("report_id")
+        if is_revisioned(main_container):
+            from mmd_process_report import remove_markdown
+            text = remove_markdown(report_body(story))
 
         # Header used by --verbose dumps and as a report-prefix line.
         # Was previously formatted with "s:{args.story}" which printed
@@ -715,6 +720,9 @@ def main():
             "claims":  structured_claims,       # structured list, keyed by seg_id
             "timing":  timing,
         }
+        if is_revisioned(main_container) and (total_para == 0 or len(structured_claims) < total_para):
+            fact_check['_truncated'] = True
+            revision_check_incomplete = True
         # Hash from content only (excluding timing) so that re-running with
         # updated timing fields does not create phantom duplicates.
         hash_source = {k: v for k, v in fact_check.items() if k != "timing"}
@@ -726,44 +734,7 @@ def main():
         # st-fact processes (from st-cross) don't clobber each other's results.
         # The AI call above runs fully in parallel — only this final write step
         # is serialised. Lock file lives in project-root tmp/.
-        lock_path = str(get_tmp_dir() / f"{tmp_safe_name(file_prefix)}.lock")
-        with open(lock_path, "w") as lock_fh:
-            fcntl.flock(lock_fh, fcntl.LOCK_EX)
-            try:
-                # Re-read the latest container under the lock so we don't
-                # overwrite results written by another process since we started.
-                with open(file_json, 'r') as f:
-                    main_container = json.load(f)
-                story = main_container["story"][story_index - 1]
-                if "fact" not in story:
-                    story["fact"] = []
-
-                # Write segments to the story if this is the first checker to run.
-                if segments_are_new or "segments" not in story or not story["segments"]:
-                    story["segments"] = segments
-
-                duplicate_index = None
-                for index, existing_fc in enumerate(story["fact"], start=1):
-                    if existing_fc.get("md5_hash") == md5_hash:
-                        duplicate_index = index
-                        if args.verbose:
-                            print("Fact check already exists, did not add duplicate")
-                        break
-                if duplicate_index is None:
-                    story["fact"].append(fact_check)
-                    if args.verbose:
-                        print("Added new fact check")
-
-                    tmp_json = file_json + ".tmp"
-                    with open(tmp_json, 'w', encoding='utf-8') as f:
-                        json.dump(main_container, f, ensure_ascii=False, indent=4)
-                        f.flush()
-                        os.fsync(f.fileno())
-                    os.replace(tmp_json, file_json)   # atomic on POSIX
-                    if args.verbose:
-                        print(f"Story container updated: {file_json}")
-            finally:
-                fcntl.flock(lock_fh, fcntl.LOCK_UN)
+        append_fact(file_json, story_index - 1, checked_digest, fact_check, segments, checked_report_id)
 
         # Clean up progress file now that this story is complete
         if progress_file and os.path.exists(progress_file):
@@ -774,6 +745,9 @@ def main():
 
     if _timeout_executor is not None:
         _timeout_executor.shutdown(wait=False, cancel_futures=True)
+    if revision_check_incomplete:
+        print("Verification incomplete; partial findings were retained. Retry checking this report.", file=sys.stderr)
+        sys.exit(1)
 
 
 

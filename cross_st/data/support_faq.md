@@ -438,3 +438,37 @@
     ```
   see_also:
     - https://github.com/crossaicore/cross-st/wiki/Install
+
+- id: update-report-review
+  question: "How do I review proposed report updates before applying them?"
+  aliases:
+    - "st-update summary"
+    - "st-update details"
+    - "review changes before updating report"
+  answer: |
+    In the next release, `st-update report.json` analyzes your change request
+    and supplied evidence, then shows proposed updates before generation.
+    `--update-summary` is the concise default; `--update-details` shows each
+    change, its reason, supporting source, and uncertainty. Both show the
+    same plan without another AI call when switching views.
+    Approve, revise the request, or cancel. Research uses supplied material,
+    not automatic web browsing. Fact-checking is optional with `--check`.
+  see_also:
+    - https://github.com/crossaicore/cross-st/wiki/st-update
+
+- id: update-report-saved-plan
+  question: "Can I save an update plan and apply it later?"
+  aliases:
+    - "st-update review-only"
+    - "st-update apply-plan"
+    - "save proposed report changes"
+  answer: |
+    Use `st-update report.json --prompt changes.prompt --review-only` to
+    research and save a proposed plan without changing the report. Review
+    it, then explicitly approve it with `--apply-plan PATH_TO_SAVED_PLAN`.
+    A changed container or changed inputs require a new review. This is
+    also the non-interactive workflow. `--dry-run` makes no AI calls,
+    whereas `--review-only` can incur planning cost. These options are
+    available in the next release.
+  see_also:
+    - https://github.com/crossaicore/cross-st/wiki/st-update

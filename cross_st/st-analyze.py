@@ -19,6 +19,8 @@ import subprocess
 import sys
 import threading
 import time
+from _report_revisions import save_legacy
+from _revision_compat import guard_legacy_path
 from mmd_startup import require_config, load_cross_env
 import pandas as pd
 from ai_handler import process_prompt, get_ai_list, get_content_auto, get_ai_model, \
@@ -291,6 +293,11 @@ def main():
 
     file_prefix = args.json_file.rsplit('.', 1)[0]  # Split from the right, only once
     file_json = file_prefix + ".json"
+    try:
+        guard_legacy_path(file_json, "st-analyze")
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
     file_prompt = file_prefix + ".prompt"
 
     # Use realpath to get the actual path of the script
@@ -560,10 +567,7 @@ def main():
             print("Story already exists; not adding duplicate")
 
     if container_modified:
-        with open(file_json, 'w', encoding='utf-8') as f:
-            json.dump(main_container, f, ensure_ascii=False, indent=4)
-            f.flush()
-            os.fsync(f.fileno())
+        save_legacy(file_json, main_container)
         if not args.quiet:
             print(f"Story container updated: {file_json}")
 

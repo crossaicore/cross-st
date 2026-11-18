@@ -9,6 +9,13 @@ Cross uses Calendar Versioning (`YYYY.M.R`).
 
 ## [Unreleased]
 
+### Added
+- `st-update`: analyze supplied evidence, review concise or detailed proposed changes,
+  then approve generation of a new report revision in the same container. Includes
+  saved plans, history/activation, optional checking, and an Edit-menu action.
+- Revision identities, version footers, active-report selection, and atomic writes
+  preserve prior report content and verification records.
+
 ---
 
 ## [2026.10.0] — 2026-10-13

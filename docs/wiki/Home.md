@@ -75,3 +75,5 @@ st-admin --setup              # configure API keys → ~/.crossenv
 
 Source: [github.com/crossaicore/cross-st](https://github.com/crossaicore/cross-st)
 
+
+- [st-update](st-update) — Research, review, and apply report revisions (next release).

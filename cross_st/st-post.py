@@ -19,6 +19,8 @@ import json
 import os
 import subprocess
 import sys
+from _report_revisions import is_revisioned, render_report, effective_prompt, content_digest
+from _revision_compat import single_index, mutate_metadata
 from mmd_startup import load_cross_env, require_config
 
 from discourse import (
@@ -52,7 +54,7 @@ def main():
     parser.add_argument('--site', type=str, choices=slugs or None, default=default_site,
                         help=f"Select Discourse site to use, default is {default_site}")
     # When -s is specified, an integer must follow; if not, argparse will raise an error.
-    parser.add_argument('-s', '--story', type=int, default=1,
+    parser.add_argument('-s', '--story', type=int, default=None,
                         help='Select story to publish: default 1')
     parser.add_argument('-f', '--fact', type=int,
                         help='Reply with fact-check to the post, default: no reply')
@@ -222,11 +224,15 @@ def main():
         try:
             with open(file_json, 'r') as file:
                 main_container = json.load(file)
+                if is_revisioned(main_container) or not args.prompt:
+                    args.story = single_index(main_container, args.story)
+                if is_revisioned(main_container) and any(files_by_type[k] for k in ('md', 'title', 'mp3')):
+                    raise ValueError('Revisioned reports cannot use unbound sidecar overrides. Publish the selected saved report.')
 
                 if args.prompt:
                     # --prompt mode: post the prompt from data[0], not a story
                     data = main_container.get("data", [])
-                    prompt_text = data[0].get("prompt", "") if data else ""
+                    prompt_text = (effective_prompt(main_container, args.story - 1) or "") if is_revisioned(main_container) else (data[0].get("prompt", "") if data else "")
                     if not prompt_text:
                         print("Error: No prompt found in container.")
                         sys.exit(1)
@@ -257,7 +263,7 @@ def main():
 
             if not args.prompt:
                 file_prefix = Path(file_json).stem  # filename no extension
-                story_markdown = select_story['markdown']
+                story_markdown = render_report(select_story)
                 # story_text = post_story['text']  # Currently on MD is used
                 story_title = select_story['title']
                 topic_id = select_story.get('topic_id')
@@ -300,9 +306,9 @@ def main():
         # Create the mp3 audio file if it does not already exist
         if not os.path.isfile(file_mp3):
             if args.fact is not None:
-                cmd = f"st-speak -s {args.story-1} --source fact {file_json}".split()
+                cmd = f"st-speak -s {args.story} --source fact {file_json}".split()
             else:
-                cmd = f"st-speak -s {args.story-1} {file_json}".split()
+                cmd = f"st-speak -s {args.story} {file_json}".split()
             subprocess.run(cmd)
             mp3_created = True
 
@@ -347,11 +353,29 @@ def main():
 
         # Update story in main container (only in normal story-post mode)
         if not args.prompt:
-            select_story["topic_id"] = topic_id
-            select_story["post_url"] = post_url
-            select_story["mp3_url"] = mp3_url
-            with open(file_json, 'w', encoding='utf-8') as f:
-                json.dump(main_container, f, ensure_ascii=False, indent=4)
+            if post_url:
+                original_digest = content_digest(select_story)
+                def record_publication(current):
+                    target = current['story'][args.story - 1]
+                    if (content_digest(target) != original_digest
+                            or target.get('report_id') != select_story.get('report_id')):
+                        raise ValueError(f'Report changed during publication. Post exists at {post_url}; receipt was not attached.')
+                    target.update(topic_id=topic_id, post_url=post_url, mp3_url=mp3_url)
+                try:
+                    mutate_metadata(file_json, record_publication)
+                except Exception as exc:
+                    from uuid import uuid4
+                    receipt_dir = Path(file_json).resolve().parent / '.cross-receipts'
+                    receipt_dir.mkdir(mode=0o700, exist_ok=True)
+                    receipt_path = receipt_dir / f'{uuid4().hex}.receipt'
+                    receipt = {'report_id': select_story.get('report_id'),
+                               'content_sha256': original_digest,
+                               'site': base_url, 'topic_id': topic_id,
+                               'post_url': post_url, 'mp3_url': mp3_url}
+                    with receipt_path.open('x', encoding='utf-8') as recovery:
+                        json.dump(receipt, recovery, ensure_ascii=False, indent=2)
+                    raise ValueError(f'Post exists at {post_url}; metadata could not be saved. '
+                                     f'Recovery receipt: {receipt_path}. {exc}') from exc
             if not args.quiet and args.verbose:
                 print(f"Story container updated: {file_json}")
     else:

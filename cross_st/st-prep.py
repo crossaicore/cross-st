@@ -21,6 +21,8 @@ import hashlib
 import json
 import os
 import sys
+from _report_revisions import save_legacy
+from _revision_compat import guard_legacy_path
 from mmd_startup import load_cross_env, require_config
 
 
@@ -77,6 +79,11 @@ def main():
         args.txt = True
 
     file_json  = file_prefix + ".json"
+    try:
+        guard_legacy_path(file_json, "st-prep")
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
     file_mp3   = file_prefix + ".mp3"
     file_txt   = file_prefix + ".txt"
     file_md    = file_prefix + ".md"
@@ -198,12 +205,7 @@ def main():
             print("Story already exists; not adding duplicate")
 
     # Atomic write — concurrent st-gen --prep processes must not corrupt each other
-    tmp_json = file_json + ".tmp"
-    with open(tmp_json, 'w', encoding='utf-8') as f:
-        json.dump(main_container, f, ensure_ascii=False, indent=4)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp_json, file_json)  # atomic on POSIX
+    save_legacy(file_json, main_container)
     if args.verbose:
         print(f"Story container updated: {file_json}")
 

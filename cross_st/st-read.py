@@ -23,6 +23,7 @@ import argparse
 import json
 import os
 import sys
+from _report_revisions import selected_indices
 from mmd_startup import require_config
 from tabulate import tabulate
 
@@ -75,6 +76,8 @@ def main():
             import textstat  # noqa: F811
         table_data = []
         for i, story in enumerate(main_container["story"], start=1):
+            if i - 1 not in selected_indices(main_container):
+                continue
             test_data = story.get("text")
             table_data.append([
                 i,

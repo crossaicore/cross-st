@@ -21,6 +21,8 @@ import subprocess
 import sys
 import threading
 import time
+from _report_revisions import save_legacy
+from _revision_compat import guard_legacy_path
 from mmd_startup import require_config
 
 from ai_handler import get_ai_list, get_default_ai, get_ai_model, get_ai_make
@@ -190,6 +192,11 @@ def main():
     file_prefix = args.prompt.rsplit('.', 1)[0]
     file_prompt = file_prefix + ".prompt"
     file_json   = file_prefix + ".json"
+    try:
+        guard_legacy_path(file_json, "st-bang")
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
 
     if not os.path.isfile(file_prompt):
         print(f"Error: prompt file not found: {file_prompt}", file=sys.stderr)
@@ -508,8 +515,7 @@ def main():
             print(f"  Warning: could not save {single}: {e}")
 
     # Write merged output
-    with open(file_json, 'w', encoding='utf-8') as f:
-        json.dump(main_container, f, ensure_ascii=False, indent=4)
+    save_legacy(file_json, main_container)
 
     if not args.quiet:
         print(f"  Saved {len(merged_files)} result(s)"

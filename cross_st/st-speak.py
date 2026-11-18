@@ -36,6 +36,8 @@ import argparse
 import json
 import os
 import sys
+from _report_revisions import is_revisioned
+from _revision_compat import single_index
 from mmd_startup import load_cross_env, require_config
 
 from _tts import render_audio
@@ -51,7 +53,7 @@ def main():
         description='Render a story into spoken audio, an mp3 file.')
     parser.add_argument('json_file', type=str,
                         help='Path to the JSON file', metavar='file.json')
-    parser.add_argument('-s', '--story', type=int, default=1,
+    parser.add_argument('-s', '--story', type=int, default=None,
                         help='Story to convert (integer), default 1')
     parser.add_argument('--source', type=str,
                         choices=['text', 'fact'], default='text',
@@ -82,6 +84,9 @@ def main():
 
         with open(file_json, 'r') as file:
             main_container = json.load(file)
+            # Accept the historical zero selector only for legacy containers.
+            if args.story != 0 or is_revisioned(main_container):
+                args.story = single_index(main_container, args.story) - 1
             if args.source == 'text':
                 tts_source = main_container["story"][args.story]["spoken"]
             elif "fact" in main_container["story"][args.story]:

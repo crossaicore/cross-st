@@ -149,6 +149,10 @@ def collect_claims(container, story_index, lens=None):
 
 def get_prompt_text(container):
     """Return the original prompt text from container['data'][0]['prompt'] or ''."""
+    from _report_revisions import is_revisioned, effective_prompt, selected_indices
+    if is_revisioned(container):
+        indices = container.get("_selected_report_indices", selected_indices(container))
+        return effective_prompt(container, indices[0]) or "" if indices else ""
     data = container.get("data", [])
     if data and isinstance(data[0], dict):
         return data[0].get("prompt", "") or ""
@@ -454,7 +458,9 @@ def _collect_author_signals(container: dict) -> list:
     out = []
     data_authors = {_author_id(d.get("make", ""), d.get("model", ""))
                     for d in container.get("data", []) if isinstance(d, dict)}
-    for story in container.get("story", []):
+    from _report_revisions import selected_indices
+    for index in container.get("_selected_report_indices", selected_indices(container)):
+        story = container['story'][index]
         if not isinstance(story, dict):
             continue
         make = story.get("make", "?")

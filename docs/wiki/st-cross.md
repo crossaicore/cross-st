@@ -61,3 +61,11 @@ The two flags operate at **different scopes** and are independent — you almost
 ## For developers
 
 Step 1 runs `st-gen --bang` per AI in parallel processes, each writing to its own `_N.json` file so there are no shared-file races. After all jobs finish, st-cross merges them into the main container and runs `st-prep` sequentially to build the `story[]` array. Step 2 launches one daemon thread per cell (N×N total), each calling `st-fact` as a subprocess for crash isolation. A per-provider `threading.Semaphore` (sized by `cross_ai_core.get_rate_limit_concurrency()`) gates how many cells for a given fact-checker AI can be in flight at once — this is what prevents parallel runs from tripping provider rate limits. `--sequential` collapses every provider onto a single `Semaphore(1)`. The live ANSI display is updated every second; Ctrl+C cancels remaining cells while preserving the results collected so far.
+
+## Revision-aware checking (next release)
+
+For containers created by [st-update](st-update), checking defaults to the active
+revision and does not regenerate reports. Use `-s N` / `--story N` to check one
+original report index, including history. `--force` clears and refreshes only
+that selected scope; other revisions and their checks remain intact. A dry run
+shows the selected matrix without changing the file.
