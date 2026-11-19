@@ -64,25 +64,15 @@ def test_output_and_preview(export, monkeypatch, name, expected):
     assert not Path('sample.pdf').exists()
 
 
-def test_all_and_replacement(export):
-    mod, _, source, captured = export
-    Path('sample_report1.pdf').write_bytes(b'old')
-    mod.main(['--all', str(source)])
-    assert Path('sample_report1.pdf').read_bytes() == b'%PDF-test'
-    assert Path('sample_report2.pdf').exists()
-    assert len(captured) == 2
-    assert 'Report 2 of 2' in captured[1][0]
-
-
-def test_all_with_one_report(export):
+def test_replacement(export):
     mod, _, source, _ = export
-    source.write_text(json.dumps({'story': [{'markdown': '# Only report'}]}))
-    mod.main(['--all', str(source)])
-    assert Path('sample.pdf').exists()
+    Path('sample.pdf').write_bytes(b'old')
+    mod.main([str(source)])
+    assert Path('sample.pdf').read_bytes() == b'%PDF-test'
 
 
 @pytest.mark.parametrize('options', [
-    ['--all', '-o', 'name.pdf'], ['--all', '-s', '2'],
+    ['--all'], ['--all', '-s', '2'],
     ['-s', '0'], ['-s', '3'], ['-o', 'sample.json'], ['--printer', 'printer'],
 ])
 def test_invalid_options_write_nothing(export, options):
@@ -179,3 +169,45 @@ def test_missing_renderer_explains_setup(export, monkeypatch, capsys):
         mod.main([str(source)])
     assert error.value.code == 1
     assert 'Pango/GObject' in capsys.readouterr().out
+
+
+@pytest.mark.parametrize('options,filename', [
+    ([], 'sample_report2_fact1.pdf'),
+    (['--output', 'Review.pdf'], 'Review.pdf'),
+])
+def test_export_fact_check(export, options, filename):
+    mod, _, source, captured = export
+    container = json.loads(source.read_text())
+    container['story'][1]['fact'] = [
+        {'make': 'evaluator', 'model': 'review-model', 'report': '# Review\n\nChecked evidence.'},
+    ]
+    source.write_text(json.dumps(container))
+    before = source.read_bytes()
+    mod.main(['-s', '2', '--fact', '1', *options, str(source)])
+    html = captured[0][0]
+    assert Path(filename).exists()
+    assert 'Checked evidence.' in html and 'Edited body' not in html
+    assert 'evaluator' in html and 'review-model' in html
+    assert 'Report 2 of 2' in html and 'Fact-check 1' in html
+    assert '<title>Fact-check 1 — Second</title>' in html
+    assert source.read_bytes() == before
+
+
+@pytest.mark.parametrize('index,facts', [(0, []), (1, []), (2, [{'report': 'One'}]),
+                                       (1, [{'report': ''}]), (1, [None])])
+def test_invalid_fact_check_writes_nothing(export, index, facts):
+    mod, _, source, captured = export
+    container = json.loads(source.read_text())
+    container['story'][0]['fact'] = facts
+    source.write_text(json.dumps(container))
+    with pytest.raises(SystemExit):
+        mod.main(['-f', str(index), str(source)])
+    assert not captured
+    assert not list(Path.cwd().glob('*.pdf'))
+
+
+def test_print_all_cannot_select_fact_check(export):
+    _, renderer, source, captured = export
+    with pytest.raises(SystemExit):
+        renderer.main(['--all', '-f', '1', str(source)])
+    assert not captured

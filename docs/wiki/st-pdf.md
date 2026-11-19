@@ -27,21 +27,27 @@ If the output has no suffix, `.pdf` is added; other suffixes are rejected.
 
 **Existing output files are replaced.** Without `--output`, exporting a different
 report from the same container replaces `subject.pdf`. Choose a separate filename
-to keep each export, or export all reports at once.
+to keep each export. Each call exports one report or one fact-check.
 
-## Export all reports
+## Export a fact-check
+
+List the reports and their saved fact-checks, then select both indices:
 
 ```bash
-st-pdf --all subject.json
+st-ls --story --fact subject.json
+st-pdf -s 2 -f 1 subject.json
+st-pdf -s 2 -f 1 -o "Fact-check review.pdf" --preview subject.json
 ```
 
-For a container with three reports, this writes `subject_report1.pdf`,
-`subject_report2.pdf`, and `subject_report3.pdf` in the current directory.
-A container with only one report produces `subject.pdf`.
-Each file contains one report; this command does not merge reports into a book.
+`-s 2 -f 1` exports fact-check 1 **for report 2**, using the same selection
+convention as `st-cat` and `st-edit`. Both indices start at 1; if you omit `-s`,
+report 1 is selected. The default filename is `subject_report2_fact1.pdf`.
+Use `--output` to choose a different filename.
 
-`--all` cannot be combined with `-s` or `--output`. Export one report at a time
-with `-s N --output FILE.pdf` when you want individual custom names.
+This exports the saved fact-check narrative, not the source report or a new
+fact-check. The header identifies the report and fact-check indices; AI
+attribution identifies the evaluator. Nothing is regenerated or changed in the
+container. A missing fact-check or empty saved narrative produces an error.
 
 ## Options
 
@@ -49,7 +55,7 @@ with `-s N --output FILE.pdf` when you want individual custom names.
 |---|---|
 | `file.json` | Cross JSON container to read |
 | `-s N`, `--story N` | Report index, starting at 1; defaults to 1 |
-| `--all` | Export every report to a separate PDF |
+| `-f N`, `--fact N` | Export saved fact-check N for the selected report |
 | `-o FILE.pdf`, `--output FILE.pdf` | Choose one output filename or path |
 | `--preview` | Save and open in the system PDF viewer |
 | `-v`, `--verbose` | Show rendering details |
@@ -81,7 +87,8 @@ The PDF's document properties include:
 
 Maker Matt Design is credited as the software maker. The report's AI attribution
 remains separate. Metadata is not a fact-check, certification, or copyright claim.
-Both `st-pdf` and `st-print` embed these properties.
+Both `st-pdf` and `st-print` embed these properties. For a fact-check, the title
+identifies the selected check and the Author field uses the evaluator make/model.
 
 ## In the interactive app
 
@@ -115,7 +122,6 @@ st-ask "How do I export a report as PDF?"
 ```
 
 For physical printing use [st-print](st-print). Its existing `--save-pdf`,
-`--output`, and `--preview` options remain supported. Batch exports from either
-command now use `_reportN.pdf` filenames (previously `_storyN.pdf` in `st-print`).
+`--output`, and `--preview` options remain supported. `st-print` also accepts `-s N -f M` to print a fact-check.
 
 Related: [st-ls](st-ls) · [st-update](st-update) · [st-post](st-post) · [st](st)

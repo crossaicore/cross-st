@@ -36,7 +36,7 @@ New user? Start here: **[Onboarding](Onboarding)** — set up your API keys and 
 | [st-man](st-man) | Manual pages for Cross commands (this system) |
 | [st-merge](st-merge) | Synthesize multiple AI stories into one |
 | [st-new](st-new) | Create a new prompt from a template |
-| **[st-pdf](st-pdf)** | **Export reports as PDF — choose a filename, preview, or export all** |
+| **[st-pdf](st-pdf)** | **Export reports as PDF — choose a filename, preview, or export a fact-check** |
 | [st-print](st-print) | Print reports to a system printer |
 | [st-plot](st-plot) | Cross-product fact-check score plots |
  [st-post](st-post)  Post a story to Discourse 

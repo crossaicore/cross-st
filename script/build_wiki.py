@@ -160,7 +160,7 @@ METADATA: dict[str, dict] = {
         "dev": "Called automatically by `st-gen` unless `--no-prep` is supplied, `st-cross`, `st-fetch`, and `st-fix`. Writes to `story[]` in the container. TTS rendering (`--mp3`) uses `mmd_voice.py` and requires the TTS extras (`pipx install 'cross-st[tts]'`).",
     },
     "st-pdf": {
-        "desc": "Export saved reports as PDF. Choose a filename with --output, open with --preview, or export every report with --all.",
+        "desc": "Export saved reports as PDF. Choose a filename with --output, open with --preview, or select a fact-check with -s N -f M.",
         "after": ["st-prep", "st-update"],
         "related": ["st-ls", "st-print", "st-post"],
         "dev": "Thin command over st-print's renderer. PDF metadata is supplied by mmd_branding.get_pdf_branding(). No AI calls or container changes.",

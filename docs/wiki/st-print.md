@@ -6,6 +6,7 @@ Send a saved report to a physical printer. For direct PDF export, use
 ```bash
 st-print subject.json                       # print report 1 to default printer
 st-print -s 2 subject.json                  # print report 2
+st-print -s 2 -f 1 subject.json             # print fact-check 1 for report 2
 st-print --all subject.json                 # print every report separately
 st-print --printer "HP_LaserJet" subject.json
 st-pdf -s 2 -o "My report.pdf" subject.json # export without printing
@@ -33,7 +34,8 @@ with `--all`; use one report index for a custom filename.
 |---|---|
 | `file.json` | Cross report container |
 | `-s N`, `--story N` | Report index from `st-ls`, starting at 1; default 1 |
-| `--all` | Print or save every report separately |
+| `-f N`, `--fact N` | Print or save fact-check N for the selected report |
+| `--all` | Print or save every report separately; cannot combine with `--fact` |
 | `--save-pdf` | Save to an automatically named PDF instead of printing |
 | `--output FILE.pdf` | Save to an explicit path instead of printing |
 | `--preview` | Save and open the system PDF viewer instead of printing |
@@ -49,3 +51,6 @@ library setup, formatting, file naming, troubleshooting, and the Maker Matt Desi
 changes the container.
 
 **Related:** [st-pdf](st-pdf) · [st-ls](st-ls) · [st-post](st-post) · [st-edit](st-edit)
+
+Fact-check export uses the saved narrative and evaluator attribution. Its default
+filename is `subject_reportN_factM.pdf`; override it with `--output`.

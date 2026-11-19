@@ -19,6 +19,7 @@ st-print subject.json                      # print report 1 to default printer
 st-print --save-pdf subject.json           # save as subject.pdf (auto-named)
 st-print --output report.pdf subject.json  # save to an explicit filename
 st-print -s 2 subject.json                # print report 2
+st-print -s 2 -f 1 subject.json           # print its first fact-check
 st-print --all subject.json               # print all reports (one PDF each)
 st-print --preview subject.json           # save PDF then open in viewer
 st-print --printer "HP_LaserJet" s.json   # send to a specific printer
@@ -26,7 +27,7 @@ st-print --printer "HP_LaserJet" s.json   # send to a specific printer
 
 For direct PDF export, use st-pdf. Both commands share the renderer and metadata.
 
-Options: -s N  --all  --save-pdf  --output FILE  --preview  --printer  -v  -q
+Options: -s N  -f N  --all  --save-pdf  --output FILE  --preview  --printer  -v  -q
 
 Requires: pip install weasyprint
 """
@@ -249,7 +250,7 @@ em     { font-style: italic; }
 # ── HTML template ─────────────────────────────────────────────────────────────
 
 def _build_html(story: dict, story_idx: int, total_stories: int,
-                source_file: str) -> str:
+                source_file: str, fact_idx: int | None = None) -> str:
     """Convert a report dict to a complete HTML document for PDF rendering."""
     import markdown as md_lib
 
@@ -273,8 +274,10 @@ def _build_html(story: dict, story_idx: int, total_stories: int,
         meta_parts.append(f'<span class="meta-row">AI: <strong>{_esc(make)}</strong>'
                           + (f' / {_esc(model)}' if model else '') + '</span>')
     meta_parts.append(f'<span class="meta-row">Date: {date_str}</span>')
-    if total_stories > 1:
+    if total_stories > 1 or fact_idx is not None:
         meta_parts.append(f'<span class="meta-row">Report {story_idx} of {total_stories}</span>')
+    if fact_idx is not None:
+        meta_parts.append(f'<span class="meta-row">Fact-check {fact_idx}</span>')
     if source_file:
         meta_parts.append(f'<span class="meta-row">Source: {_esc(os.path.basename(source_file))}</span>')
 
@@ -417,6 +420,10 @@ def main(argv=None):
         help="Report number to print (1-based, default: 1)",
     )
     parser.add_argument(
+        "-f", "--fact", type=int, metavar="N",
+        help="Print / save fact-check N for the selected report (1-based)",
+    )
+    parser.add_argument(
         "--all", dest="all_stories", action="store_true",
         help="Print / save all reports in the container",
     )
@@ -446,6 +453,8 @@ def main(argv=None):
     )
 
     args = parser.parse_args(argv)
+    if args.all_stories and args.fact is not None:
+        parser.error("--fact cannot be combined with --all; select one report with -s N")
     if args.all_stories and args.output:
         parser.error("--output cannot be combined with --all; select one report with -s N")
 
@@ -483,13 +492,31 @@ def main(argv=None):
             sys.exit(1)
         indices = [idx]
 
+    fact_document = None
+    if args.fact is not None:
+        selected = stories[indices[0] - 1]
+        facts = selected.get("fact") or []
+        if not isinstance(facts, list) or not 1 <= args.fact <= len(facts):
+            parser.error(f"Fact-check {args.fact} does not exist for report {indices[0]}; "
+                         "use st-ls --story --fact to find existing indices")
+        fact = facts[args.fact - 1]
+        body = fact.get("report") if isinstance(fact, dict) else None
+        if not isinstance(body, str) or not body.strip():
+            parser.error(f"Fact-check {args.fact} has no saved report text to export")
+        fact_document = {
+            "markdown": body,
+            "title": f"Fact-check {args.fact} — {selected.get('title') or f'Report {indices[0]}'}",
+            "make": fact.get("make") or "",
+            "model": fact.get("model") or "",
+        }
+
     # Determine output mode
     do_save  = args.save_pdf or args.output or args.preview
 
     explicit_pdf = args.output  # str or None
 
     for story_idx in indices:
-        story = stories[story_idx - 1]
+        story = fact_document if fact_document is not None else stories[story_idx - 1]
 
         make  = story.get("make", "unknown")
         title_short = (story.get("title") or f"report {story_idx}")[:60]
@@ -502,6 +529,7 @@ def main(argv=None):
             story_idx=story_idx,
             total_stories=len(stories),
             source_file=file_json,
+            fact_idx=args.fact,
         )
 
         if args.verbose and not args.quiet:
@@ -517,6 +545,8 @@ def main(argv=None):
             if explicit_pdf and len(indices) == 1:
                 # Single report with explicit name: use it directly
                 out_path = explicit_pdf
+            elif args.fact is not None:
+                out_path = f"{Path(file_json).stem}_report{story_idx}_fact{args.fact}.pdf"
             else:
                 out_path = _default_pdf_path(file_json, story_idx, len(indices))
 

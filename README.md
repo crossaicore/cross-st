@@ -24,7 +24,7 @@ and built for people who want to publish accurate content fast.
 - **Multi-AI generation** — submit the same prompt to multiple AI providers simultaneously
 - **Cross-product fact-checking** — each AI fact-checks every other AI's report (5×5 matrix)
 - **Analysis and plots** — reading metrics, score heatmaps, bar charts
-- **PDF export** — save any report with [`st-pdf`](docs/wiki/st-pdf.md); choose a filename, preview, or export all reports
+- **PDF export** — save any report with [`st-pdf`](docs/wiki/st-pdf.md); choose a filename, preview, or export a saved fact-check
 - **Discourse publishing** — post stories, fact-checks, and audio to any Discourse site
 - **Text-to-speech** — generate and post MP3 audio via a local TTS server
 - **API response cache** — avoid redundant API calls; replay results instantly

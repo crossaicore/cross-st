@@ -25,6 +25,7 @@
   aliases:
     - "st-pdf"
     - "save report PDF"
+    - "export fact-check as PDF"
     - "change PDF filename"
     - "PDF Maker Matt Design metadata"
   error_signatures: []
@@ -34,8 +35,11 @@
     `st-pdf -s 2 -o "My report.pdf" file.json`. Add `--preview` to open the PDF.
     Existing output files are replaced; the JSON container is unchanged.
 
-    `st-pdf --all file.json` exports separate PDFs, named `file_reportN.pdf`
-    when there are multiple reports. Do not combine --all with --output.
+    Use `st-ls --story --fact file.json` to find fact-check indices, then
+    `st-pdf -s 2 -f 1 file.json` to export fact-check 1 for report 2 as
+    `file_report2_fact1.pdf`. Add `-o "Review.pdf"` to choose a filename.
+    This exports the saved narrative with the evaluator's attribution.
+    Each call exports one report or one fact-check.
     In the app's Post menu, `d` exports the selected report; `D` prints it.
     PDF properties credit Cross, Maker Matt Design, and https://crossai.dev.
     No AI call is made. Run `st-man st-pdf` for formatting and setup guidance.
