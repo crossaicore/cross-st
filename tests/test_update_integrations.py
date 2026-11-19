@@ -248,7 +248,7 @@ def test_print_ordinary_selection_reads_saved_body(report_file, monkeypatch, sel
     monkeypatch.setattr(mod, 'require_config', lambda: None)
     monkeypatch.setattr(mod, '_WeasyHTML', object())
     rendered = []
-    monkeypatch.setattr(mod, '_render_pdf', lambda html: rendered.append(html) or b'%PDF-test')
+    monkeypatch.setattr(mod, '_render_pdf', lambda html, **kwargs: rendered.append(html) or b'%PDF-test')
     monkeypatch.setattr(sys, 'argv', ['st-print', '--save-pdf', *selection, str(report_file)])
     report_file.with_suffix('.md').write_text('Stale sidecar')
     mod.main()

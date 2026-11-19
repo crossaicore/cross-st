@@ -39,7 +39,16 @@ def test_index_includes_new_commands(manual, monkeypatch, capsys):
     monkeypatch.setattr(sys, 'argv', ['st-man'])
     manual.main()
     output = capsys.readouterr().out
-    assert 'st-update' in output and 'st-ask' in output
+    assert 'st-update' in output and 'st-ask' in output and 'st-pdf' in output
+
+
+def test_pdf_manual_is_available(manual, monkeypatch, capsys):
+    monkeypatch.setattr(sys, 'argv', ['st-man', 'st-pdf'])
+    manual.main()
+    output = capsys.readouterr().out
+    assert 'Export reports as PDF' in output
+    assert '--output' in output and 'Maker Matt Design' in output
+    assert 'https://github.com/crossaicore/cross-st/wiki/st-pdf' in output
 
 
 def test_unknown_command_still_rejected(manual, monkeypatch):

@@ -365,7 +365,7 @@ _ENTRY_POINTS = [
     "st-domain", "st-edit", "st-fact", "st-fetch", "st-find",
     "st-fix", "st-gen", "st-heatmap", "st-ls", "st-man",
     "st-merge", "st-new", "st-plot", "st-post", "st-prep",
-    "st-print", "st-speed", "st-stones", "st-verdict",
+    "st-pdf", "st-print", "st-speed", "st-stones", "st-verdict",
 ]
 
 @pytest.mark.slow

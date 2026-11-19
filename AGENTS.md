@@ -21,7 +21,8 @@ cross_st/st-fix.py       ← Improve a story via fact-check feedback (modes: ite
 cross_st/st-merge.py     ← Synthesize multiple AI stories (auto: simple mode or quality mode using fact scores)
 cross_st/st-man.py       ← Man-page viewer: local help from docstrings + --web opens GitHub Wiki
 cross_st/st-new.py       ← Create a new prompt from template/; opens editor; `-g`/`--gen` auto-runs st-gen+st-prep after editing; `--bang` runs st-bang (all AIs); `--ai` selects provider (defaults to `get_default_ai()`)
-cross_st/st-print.py     ← Convert a story to PDF; print to system printer or --save-pdf / --output file
+cross_st/st-pdf.py       ← Export reports as PDF; thin CLI over st-print with -s, --all, -o/--output, --preview
+cross_st/st-print.py     ← Print reports or save PDF; shared renderer and mmd_branding PDF metadata
 cross_st/st-heatmap.py   ← Cross-product fact-check score heatmap (evaluator vs target)
 cross_st/st-verdict.py   ← Verdict category bar chart (stacked per author AI)
 cross_st/st-speed.py     ← AI performance/speed analysis and timing comparison

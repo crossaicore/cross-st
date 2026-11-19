@@ -74,6 +74,7 @@ _COMMANDS = [
     "st-plot",
     "st-post",
     "st-prep",
+    "st-pdf",
     "st-print",
     "st-read",
     "st-rm",

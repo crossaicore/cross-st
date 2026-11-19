@@ -26,6 +26,11 @@ Cross uses Calendar Versioning (`YYYY.M.R`).
   render returns a nonzero status so the menu does not play an older MP3.
 
 ### Added
+- `st-pdf` exports saved reports using the existing PDF renderer, with report
+  selection, `-o/--output`, `--all`, and `--preview`. The Post menu uses it for `d`.
+- PDF properties credit Cross, Maker Matt Design, and https://crossai.dev while
+  preserving the recorded AI attribution. Both PDF commands resolve relative
+  images from the container directory.
 - The interactive Edit menu offers `u` to append an updated report and `U` to
   iterate on the selected report with `-s N --iterate N`.
 - `st-update` generates an updated report from saved Markdown, an authored request,
@@ -35,6 +40,8 @@ Cross uses Calendar Versioning (`YYYY.M.R`).
 - Three worked update examples covering human edits, new observations, and selected feedback.
 
 ### Changed
+- Multiple PDF exports use `_reportN.pdf` filenames. `st-print --all --output`
+  now reports the conflicting options instead of silently ignoring the filename.
 - `st-update` defaults to the source report's saved provider and model. Edit-menu
   `u` and `U` inherit that author instead of forcing the globally selected agent;
   explicit `--agent` selects a different author and its configured model.

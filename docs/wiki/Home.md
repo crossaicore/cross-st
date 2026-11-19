@@ -2,7 +2,7 @@
 
 *AI checking AI.*
 
-Cross generates research reports using up to 5 AI providers simultaneously (or more via [model agents](Multi-Model)), then cross-checks every report against all others — a 5×5 fact-check matrix by default. Reports can be published to Discourse.
+Cross generates research reports using up to 5 AI providers simultaneously (or more via [model agents](Multi-Model)), then cross-checks every report against all others — a 5×5 fact-check matrix by default. Reports can be saved as PDF with **[st-pdf](st-pdf)** or published to Discourse.
 
 ---
 
@@ -36,6 +36,8 @@ New user? Start here: **[Onboarding](Onboarding)** — set up your API keys and 
 | [st-man](st-man) | Manual pages for Cross commands (this system) |
 | [st-merge](st-merge) | Synthesize multiple AI stories into one |
 | [st-new](st-new) | Create a new prompt from a template |
+| **[st-pdf](st-pdf)** | **Export reports as PDF — choose a filename, preview, or export all** |
+| [st-print](st-print) | Print reports to a system printer |
 | [st-plot](st-plot) | Cross-product fact-check score plots |
  [st-post](st-post)  Post a story to Discourse 
  [discourse-workflows](discourse-workflows)  Discourse posting workflow guide 

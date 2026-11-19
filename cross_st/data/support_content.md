@@ -8,6 +8,23 @@
 
 ## Section 1 — Frequently asked questions
 
+### How do I export a report as PDF?
+
+Run `st-pdf file.json` to save report 1 as `file.pdf` in the current directory.
+Choose a report from `st-ls` with `-s N`, and choose a filename with
+`st-pdf -s 2 -o "My report.pdf" file.json`. Add `--preview` to open the PDF.
+Existing output files are replaced; the JSON container is unchanged.
+
+`st-pdf --all file.json` exports separate PDFs, named `file_reportN.pdf`
+when there are multiple reports. Do not combine --all with --output.
+In the app's Post menu, `d` exports the selected report; `D` prints it.
+PDF properties credit Cross, Maker Matt Design, and https://crossai.dev.
+No AI call is made. Run `st-man st-pdf` for formatting and setup guidance.
+
+**See also:**
+- https://github.com/crossaicore/cross-st/wiki/st-pdf
+- https://github.com/crossaicore/cross-st/wiki/st-print
+
 ### How do I update an existing report?
 
 Run `st-update -s 1 report.json` and describe the changes in your editor.
@@ -720,7 +737,7 @@ Optional top-level `_publications[]` retains known remote titles, site URLs, top
 
 *AI checking AI.*
 
-Cross generates research reports using up to 5 AI providers simultaneously (or more via [model agents](Multi-Model)), then cross-checks every report against all others — a 5×5 fact-check matrix by default. Reports can be published to Discourse.
+Cross generates research reports using up to 5 AI providers simultaneously (or more via [model agents](Multi-Model)), then cross-checks every report against all others — a 5×5 fact-check matrix by default. Reports can be saved as PDF with **[st-pdf](st-pdf)** or published to Discourse.
 
 ---
 
@@ -754,6 +771,8 @@ New user? Start here: **[Onboarding](Onboarding)** — set up your API keys and 
 | [st-man](st-man) | Manual pages for Cross commands (this system) |
 | [st-merge](st-merge) | Synthesize multiple AI stories into one |
 | [st-new](st-new) | Create a new prompt from a template |
+| **[st-pdf](st-pdf)** | **Export reports as PDF — choose a filename, preview, or export all** |
+| [st-print](st-print) | Print reports to a system printer |
 | [st-plot](st-plot) | Cross-product fact-check score plots |
  [st-post](st-post)  Post a story to Discourse 
  [discourse-workflows](discourse-workflows)  Discourse posting workflow guide 
@@ -4543,6 +4562,130 @@ Template resolution order: `./template/` (CWD) → `~/.cross_templates/` → `<s
 - `-v`, `--verbose`: Enable verbose output, default is verbose
 - `-q`, `--quiet`: Enable minimal output
 
+### st-pdf
+
+# st-pdf — Export reports as PDF
+
+**Save a formatted PDF with one command:**
+
+```bash
+st-pdf subject.json
+```
+
+This reads report 1 from `subject.json` and saves `subject.pdf` in your current
+working directory. It uses the saved Markdown, including manual edits and updates.
+It makes no AI calls and leaves the JSON container unchanged.
+
+## Choose the report and filename
+
+Use the same report indices shown by `st-ls` and accepted by other commands:
+
+```bash
+st-ls subject.json
+st-pdf -s 2 subject.json
+st-pdf -s 2 -o "My finished report.pdf" subject.json
+st-pdf -s 2 --output ~/Documents/summary.pdf --preview subject.json
+```
+
+`--preview` saves the PDF and opens your system PDF viewer. It does not print.
+The destination directory must already exist. Quote paths containing spaces.
+If the output has no suffix, `.pdf` is added; other suffixes are rejected.
+
+**Existing output files are replaced.** Without `--output`, exporting a different
+report from the same container replaces `subject.pdf`. Choose a separate filename
+to keep each export, or export all reports at once.
+
+## Export all reports
+
+```bash
+st-pdf --all subject.json
+```
+
+For a container with three reports, this writes `subject_report1.pdf`,
+`subject_report2.pdf`, and `subject_report3.pdf` in the current directory.
+A container with only one report produces `subject.pdf`.
+Each file contains one report; this command does not merge reports into a book.
+
+`--all` cannot be combined with `-s` or `--output`. Export one report at a time
+with `-s N --output FILE.pdf` when you want individual custom names.
+
+## Options
+
+| Option | Purpose |
+|---|---|
+| `file.json` | Cross JSON container to read |
+| `-s N`, `--story N` | Report index, starting at 1; defaults to 1 |
+| `--all` | Export every report to a separate PDF |
+| `-o FILE.pdf`, `--output FILE.pdf` | Choose one output filename or path |
+| `--preview` | Save and open in the system PDF viewer |
+| `-v`, `--verbose` | Show rendering details |
+| `-q`, `--quiet` | Suppress informational output; errors still appear |
+| `-h`, `--help` | Show command help |
+
+The long selector spelling `--story` is retained for consistency with existing
+Cross commands. It selects a report, just like `-s`.
+
+## Formatting and PDF properties
+
+The shared `st-print` renderer supports headings, emphasis, lists, blockquotes,
+tables, code blocks, clickable links, and images. Pages use Letter size, readable
+body text, a report/source header, a website footer, and page numbers. Relative
+image paths resolve from the directory containing the JSON file; remote images
+need network access. Rendering arbitrary Markdown/HTML is not a guarantee of
+pixel-identical reproduction of its original website.
+
+The PDF's document properties include:
+
+| Property | Value |
+|---|---|
+| Title | Saved report title, falling back to its first heading or container filename |
+| Author | Recorded AI make and model, when present |
+| Creator | `Cross — Maker Matt Design` |
+| Subject | `Exported with Cross by Maker Matt Design — https://crossai.dev` |
+| Creation date | Time of export |
+| Producer | WeasyPrint (the rendering software) |
+
+Maker Matt Design is credited as the software maker. The report's AI attribution
+remains separate. Metadata is not a fact-check, certification, or copyright claim.
+Both `st-pdf` and `st-print` embed these properties.
+
+## In the interactive app
+
+Open `st subject.json`, select a report with `S`, then open **Post** (`p`):
+
+- `d` saves the selected report with `st-pdf -s N`.
+- `D` sends it to the default printer with `st-print -s N`.
+
+Use `st-pdf -o ...` directly when you want a custom filename.
+
+## Setup and troubleshooting
+
+WeasyPrint is included with Cross. Its native Pango/GObject libraries must also
+be available. On macOS, install them with `brew install pango`; on Debian/Ubuntu,
+use `sudo apt-get install libpango-1.0-0 libpangoft2-1.0-0`.
+The command prints platform-specific setup guidance if the renderer cannot load.
+
+- **No reports found:** use `st-ls file.json` to inspect the container. If it has
+  raw responses only, prepare them with `st-prep file.json`.
+- **Report does not exist:** choose an existing index from `st-ls`.
+- **Could not save PDF:** check that the destination directory exists and is writable.
+- **Missing image:** check the image path or URL; remote resources may be unavailable.
+
+## Learn more
+
+```bash
+st-pdf --help
+st-man st-pdf
+st-man st-pdf --web
+st-ask "How do I export a report as PDF?"
+```
+
+For physical printing use [st-print](st-print). Its existing `--save-pdf`,
+`--output`, and `--preview` options remain supported. Batch exports from either
+command now use `_reportN.pdf` filenames (previously `_storyN.pdf` in `st-print`).
+
+Related: [st-ls](st-ls) · [st-update](st-update) · [st-post](st-post) · [st](st)
+
 ### st-plot
 
 # st-plot — Plot cross-product fact-check scores
@@ -4737,39 +4880,57 @@ Called automatically by `st-gen` unless `--no-prep` is supplied, `st-cross`, `st
 
 ### st-print
 
-# st-print — Convert a story to PDF and print or save
+# st-print — Print reports or save PDF
 
-Exports a story as a PDF, or sends it directly to a printer. Use `--save-pdf` to save the file without printing.
-
-**Run after:** `st-prep`
-
-## Examples
+Send a saved report to a physical printer. For direct PDF export, use
+**[st-pdf](st-pdf)**, which shares this command's renderer and PDF metadata.
 
 ```bash
-st-print subject.json                      # print story 1 to default printer
-st-print --save-pdf subject.json           # save as subject.pdf (auto-named)
-st-print --output report.pdf subject.json  # save to an explicit filename
-st-print -s 2 subject.json                # print story 2
-st-print --all subject.json               # print all stories (one PDF each)
-st-print --preview subject.json           # save PDF then open in viewer
-st-print --printer "HP_LaserJet" s.json   # send to a specific printer
+st-print subject.json                       # print report 1 to default printer
+st-print -s 2 subject.json                  # print report 2
+st-print --all subject.json                 # print every report separately
+st-print --printer "HP_LaserJet" subject.json
+st-pdf -s 2 -o "My report.pdf" subject.json # export without printing
 ```
 
-**Options:** `-s`  `story`  `--all`  `--save-pdf`  `--output`  `FILE`  `--preview`  `--printer`  `-v`  `-q`
+## Existing PDF options
 
-**Related:** [st-post](st-post) · [st-edit](st-edit)
+These remain supported:
 
----
+```bash
+st-print --save-pdf subject.json            # save subject.pdf
+st-print --output report.pdf subject.json   # save to an explicit filename
+st-print --preview subject.json            # save and open; does not print
+st-print --all --save-pdf subject.json      # subject_report1.pdf, etc.
+```
 
-## For developers
+With one exported report the automatic name is `subject.pdf`; multiple exports
+use `subject_reportN.pdf` (formerly `subject_storyN.pdf`). Default output is in
+the current directory. Existing files are replaced. `--output` cannot be combined
+with `--all`; use one report index for a custom filename.
 
-Pipeline: Markdown → HTML (via `mistune`) → PDF (via `WeasyPrint`). `--preview` opens the PDF in the system viewer before printing.
+## Options
 
-## Additional current options
+| Option | Purpose |
+|---|---|
+| `file.json` | Cross report container |
+| `-s N`, `--story N` | Report index from `st-ls`, starting at 1; default 1 |
+| `--all` | Print or save every report separately |
+| `--save-pdf` | Save to an automatically named PDF instead of printing |
+| `--output FILE.pdf` | Save to an explicit path instead of printing |
+| `--preview` | Save and open the system PDF viewer instead of printing |
+| `--printer NAME` | Choose a printer (`lpr -P NAME`) |
+| `-v`, `--verbose` | Show rendering details |
+| `-q`, `--quiet` | Suppress informational output |
+| `-h`, `--help` | Show help |
 
-- `-s`, `--story`: Story number to print (1-based, default: 1)
-- `-v`, `--verbose`: Verbose output
-- `-q`, `--quiet`: Suppress informational output
+Physical printing uses `lpr` on macOS/Linux and requires a configured printer.
+PDF rendering uses Python-Markdown and WeasyPrint. See [st-pdf](st-pdf) for native
+library setup, formatting, file naming, troubleshooting, and the Maker Matt Design
+/ https://crossai.dev document properties. Neither command makes AI calls or
+changes the container.
+
+**Related:** [st-pdf](st-pdf) · [st-ls](st-ls) · [st-post](st-post) · [st-edit](st-edit)
 
 ### st-read
 
@@ -6032,6 +6193,13 @@ For simply undoing a mis-selected menu item (before pressing RETURN), use **`Ctr
    ```
 3. If the command writes to the `.json` container, add its name to `POST_CMD_REFRESH` at the top of the file — this tells `st` to re-read the file after the command finishes so story/fact-check counts stay current.
 
+## Save a PDF
+
+In **Post** (`p`), press `d` to export the selected report with `st-pdf -s N`.
+Press `D` to send it to the default printer with `st-print -s N`.
+To choose a filename, run `st-pdf -s N -o "My report.pdf" file.json`.
+See [st-pdf](st-pdf) for all export options and PDF document properties.
+
 ### tts-audio
 
 # TTS Audio
@@ -6692,13 +6860,25 @@ Source: `cross_st/st-prep.py`.
 - `-v`, `--verbose`: Verbose output, default: off
 - `-q`, `--quiet`: Minimal output, default: off
 
+### st-pdf
+
+Source: `cross_st/st-pdf.py`.
+
+- `json_file`: Cross report container
+- `-s`, `--story`: Report index from st-ls (1-based, default: 1)
+- `--all`: Export every report as a separate PDF
+- `-o`, `--output`: Output filename or path for one report; adds .pdf if no suffix
+- `--preview`: Save and open in the system PDF viewer
+- `-v`, `--verbose`: Show rendering details
+- `-q`, `--quiet`: Suppress informational output
+
 ### st-print
 
 Source: `cross_st/st-print.py`.
 
-- `json_file`: Path to the story container JSON file
-- `-s`, `--story`: Story number to print (1-based, default: 1)
-- `--all`: Print / save all stories in the container
+- `json_file`: Path to the report container JSON file
+- `-s`, `--story`: Report number to print (1-based, default: 1)
+- `--all`: Print / save all reports in the container
 - `--save-pdf`: Save PDF to a file instead of printing (auto-names from container)
 - `--output`: Explicit output PDF filename (implies --save-pdf)
 - `--preview`: Save PDF and open it in the system PDF viewer
@@ -6889,6 +7069,11 @@ Cross uses Calendar Versioning (`YYYY.M.R`).
   render returns a nonzero status so the menu does not play an older MP3.
 
 ### Added
+- `st-pdf` exports saved reports using the existing PDF renderer, with report
+  selection, `-o/--output`, `--all`, and `--preview`. The Post menu uses it for `d`.
+- PDF properties credit Cross, Maker Matt Design, and https://crossai.dev while
+  preserving the recorded AI attribution. Both PDF commands resolve relative
+  images from the container directory.
 - The interactive Edit menu offers `u` to append an updated report and `U` to
   iterate on the selected report with `-s N --iterate N`.
 - `st-update` generates an updated report from saved Markdown, an authored request,
@@ -6898,6 +7083,8 @@ Cross uses Calendar Versioning (`YYYY.M.R`).
 - Three worked update examples covering human edits, new observations, and selected feedback.
 
 ### Changed
+- Multiple PDF exports use `_reportN.pdf` filenames. `st-print --all --output`
+  now reports the conflicting options instead of silently ignoring the filename.
 - `st-update` defaults to the source report's saved provider and model. Edit-menu
   `u` and `U` inherit that author instead of forcing the globally selected agent;
   explicit `--agent` selects a different author and its configured model.

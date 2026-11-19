@@ -134,8 +134,8 @@ menus = {
             "a": "Post story with mp3 audio",
             "f": "Post fact-check",
             "v": "Preview post",
-            "d": "Save story as PDF  (st-print --save-pdf)",
-            "D": "Print story to default printer  (st-print)",
+            "d": "Save report as PDF  (st-pdf)",
+            "D": "Print report to default printer  (st-print)",
         }),
         "u": ("Utility", {
             "p": "View all Cross-Product plots",
@@ -393,9 +393,9 @@ def execute_menu(menu_name, choice):
                 case "v":
                     cmd = f"st-edit --view-only --markdown -s {story_sel} {file_json}"
                 case "d":
-                    cmd = f"st-print --save-pdf -s {story_sel} {file_json}"
+                    cmd = f"st-pdf -s {story_sel} {shlex.quote(file_json)}"
                 case "D":
-                    cmd = f"st-print -s {story_sel} {file_json}"
+                    cmd = f"st-print -s {story_sel} {shlex.quote(file_json)}"
                 case _:
                     print("\nCommand not implemented yet.")
 

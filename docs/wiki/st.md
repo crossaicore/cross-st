@@ -81,3 +81,10 @@ For simply undoing a mis-selected menu item (before pressing RETURN), use **`Ctr
        cmd = f"st-mycommand {file_json}"
    ```
 3. If the command writes to the `.json` container, add its name to `POST_CMD_REFRESH` at the top of the file — this tells `st` to re-read the file after the command finishes so story/fact-check counts stay current.
+
+## Save a PDF
+
+In **Post** (`p`), press `d` to export the selected report with `st-pdf -s N`.
+Press `D` to send it to the default printer with `st-print -s N`.
+To choose a filename, run `st-pdf -s N -o "My report.pdf" file.json`.
+See [st-pdf](st-pdf) for all export options and PDF document properties.

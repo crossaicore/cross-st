@@ -1,30 +1,32 @@
 #!/usr/bin/env python3
 """
-## st-print — Convert a story to PDF and print or save
+## st-print — Print reports or save PDF
 
-Converts a story's Markdown to a high-quality PDF using WeasyPrint.
+Converts a report's Markdown to a high-quality PDF using WeasyPrint.
 The PDF is styled with a clean, print-optimised stylesheet.
 
 By default, sends the PDF to the system default printer via `lpr`.
 Use `--save-pdf` to write to a file instead, and `--output` to specify
 an explicit filename. Use `--preview` to open the PDF after saving.
 
-Run after:  st-gen   (generated a story)
-            st-prep  (polished the story text)
+Run after:  st-gen   (generated a report)
+            st-prep  (polished the report text)
 Run before: st-post  (publish to Discourse)
             done     (or save/print and you're finished)
 
 ```
-st-print subject.json                      # print story 1 to default printer
+st-print subject.json                      # print report 1 to default printer
 st-print --save-pdf subject.json           # save as subject.pdf (auto-named)
 st-print --output report.pdf subject.json  # save to an explicit filename
-st-print -s 2 subject.json                # print story 2
-st-print --all subject.json               # print all stories (one PDF each)
+st-print -s 2 subject.json                # print report 2
+st-print --all subject.json               # print all reports (one PDF each)
 st-print --preview subject.json           # save PDF then open in viewer
 st-print --printer "HP_LaserJet" s.json   # send to a specific printer
 ```
 
-Options: -s story  --all  --save-pdf  --output FILE  --preview  --printer  -v  -q
+For direct PDF export, use st-pdf. Both commands share the renderer and metadata.
+
+Options: -s N  --all  --save-pdf  --output FILE  --preview  --printer  -v  -q
 
 Requires: pip install weasyprint
 """
@@ -37,6 +39,7 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+from mmd_branding import get_pdf_branding
 from mmd_startup import require_config, load_cross_env
 
 _WEASYPRINT_ERR: str | None = None
@@ -50,7 +53,7 @@ except (ImportError, OSError) as _wp_exc:
 load_cross_env()
 
 
-# ── CSS stylesheet for printed stories ───────────────────────────────────────
+# ── CSS stylesheet for printed reports ───────────────────────────────────────
 
 _CSS = """
 @page {
@@ -247,9 +250,10 @@ em     { font-style: italic; }
 
 def _build_html(story: dict, story_idx: int, total_stories: int,
                 source_file: str) -> str:
-    """Convert a story dict to a complete HTML document for PDF rendering."""
+    """Convert a report dict to a complete HTML document for PDF rendering."""
     import markdown as md_lib
 
+    branding = get_pdf_branding()
     make   = story.get("make", "")
     model  = story.get("model", "")
     title  = story.get("title", "").strip()
@@ -266,33 +270,37 @@ def _build_html(story: dict, story_idx: int, total_stories: int,
     # Build metadata row
     meta_parts = []
     if make:
-        meta_parts.append(f'<span class="meta-row">AI: <strong>{make}</strong>'
-                          + (f' / {model}' if model else '') + '</span>')
+        meta_parts.append(f'<span class="meta-row">AI: <strong>{_esc(make)}</strong>'
+                          + (f' / {_esc(model)}' if model else '') + '</span>')
     meta_parts.append(f'<span class="meta-row">Date: {date_str}</span>')
     if total_stories > 1:
-        meta_parts.append(f'<span class="meta-row">Story {story_idx} of {total_stories}</span>')
+        meta_parts.append(f'<span class="meta-row">Report {story_idx} of {total_stories}</span>')
     if source_file:
-        meta_parts.append(f'<span class="meta-row">Source: {os.path.basename(source_file)}</span>')
+        meta_parts.append(f'<span class="meta-row">Source: {_esc(os.path.basename(source_file))}</span>')
 
     meta_html = '<div class="story-meta">' + "".join(meta_parts) + '</div>'
 
     # Footer with hashtags + branding
-    footer_parts = ["crossai.dev"]
+    footer_parts = [f'<a href="{_esc(branding["website"])}">{_esc(branding["website"])}</a>']
     if tags:
-        footer_parts.append(" · " + "  ".join(tags))
+        footer_parts.append(" · " + "  ".join(_esc(tag) for tag in tags))
     footer_html = f'<div class="story-footer">{" ".join(footer_parts)}</div>'
 
     # Title — use explicit title field; fall back to h1 extracted from markdown
     if not title:
         import re
-        m = re.match(r'^#\s+(.+)$', body_md, re.MULTILINE)
-        title = m.group(1).strip() if m else os.path.basename(source_file or "Story")
+        m = re.search(r'^#\s+(.+)$', body_md, re.MULTILINE)
+        title = m.group(1).strip() if m else os.path.basename(source_file or "Report")
 
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <title>{_esc(title)}</title>
+<meta name="author" content="{_esc(' / '.join(part for part in (make, model) if part))}">
+<meta name="generator" content="{_esc(branding['creator'])}">
+<meta name="description" content="{_esc(branding['subject'])}">
+<meta name="dcterms.created" content="{datetime.now().astimezone().isoformat(timespec='seconds')}">
 <style>{_CSS}</style>
 </head>
 <body>
@@ -315,12 +323,12 @@ def _esc(text: str) -> str:
 
 # ── PDF generation ────────────────────────────────────────────────────────────
 
-def _render_pdf(html: str) -> bytes:
+def _render_pdf(html: str, base_url: str | None = None) -> bytes:
     """Render HTML to PDF bytes using WeasyPrint."""
     if _WeasyHTML is None:
         _print_weasyprint_install_hint()
         sys.exit(1)
-    return _WeasyHTML(string=html).write_pdf()
+    return _WeasyHTML(string=html, base_url=base_url).write_pdf()
 
 
 def _print_weasyprint_install_hint() -> None:
@@ -328,7 +336,7 @@ def _print_weasyprint_install_hint() -> None:
     import platform
     system = platform.system()
     print()
-    print("Error: st-print requires WeasyPrint and its native Pango/GObject libraries.")
+    print("Error: PDF export requires WeasyPrint and its native Pango/GObject libraries.")
     if _WEASYPRINT_ERR:
         print(f"  Detail: {_WEASYPRINT_ERR}")
     print()
@@ -388,29 +396,29 @@ def _default_pdf_path(json_file: str, story_idx: int, total: int) -> str:
     """Auto-generate a PDF filename from the container path."""
     base = Path(json_file).stem
     if total > 1:
-        return f"{base}_story{story_idx}.pdf"
+        return f"{base}_report{story_idx}.pdf"
     return f"{base}.pdf"
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def main():
+def main(argv=None):
     require_config()
     parser = argparse.ArgumentParser(
         prog="st-print",
-        description="Convert a story to PDF and print or save it.",
+        description="Convert a report to PDF and print or save it.",
     )
     parser.add_argument(
         "json_file", type=str, metavar="file.json",
-        help="Path to the story container JSON file",
+        help="Path to the report container JSON file",
     )
     parser.add_argument(
         "-s", "--story", type=int, default=1,
-        help="Story number to print (1-based, default: 1)",
+        help="Report number to print (1-based, default: 1)",
     )
     parser.add_argument(
         "--all", dest="all_stories", action="store_true",
-        help="Print / save all stories in the container",
+        help="Print / save all reports in the container",
     )
     parser.add_argument(
         "--save-pdf", dest="save_pdf", action="store_true",
@@ -437,10 +445,11 @@ def main():
         help="Suppress informational output",
     )
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    if args.all_stories and args.output:
+        parser.error("--output cannot be combined with --all; select one report with -s N")
 
-    file_prefix = args.json_file.rsplit(".", 1)[0]
-    file_json   = file_prefix + ".json"
+    file_json = str(Path(args.json_file).expanduser().with_suffix(".json"))
 
     if not os.path.isfile(file_json):
         print(f"Error: File not found: {file_json}")
@@ -449,28 +458,33 @@ def main():
     try:
         with open(file_json, "r", encoding="utf-8") as f:
             container = json.load(f)
-    except json.JSONDecodeError as e:
+    except (OSError, json.JSONDecodeError) as e:
         print(f"Error: Invalid JSON in {file_json}: {e}")
         sys.exit(1)
 
+    if not isinstance(container, dict) or not isinstance(container.get("story", []), list):
+        parser.error("Expected a Cross JSON container with a report array")
     stories = container.get("story", [])
+    if any(not isinstance(report, dict) for report in stories):
+        parser.error("Every report in the container must be an object")
+    if args.output and Path(args.output).resolve() == Path(file_json).resolve():
+        parser.error("PDF output must not overwrite the source container")
     if not stories:
-        print("Error: No stories found in container (run st-prep first).")
+        print("Error: No reports found in container (run st-prep first).")
         sys.exit(1)
 
-    # Determine which stories to process
+    # Determine which reports to process
     if args.all_stories:
         indices = list(range(1, len(stories) + 1))
     else:
         idx = args.story
         if idx < 1 or idx > len(stories):
-            print(f"Error: Story {idx} does not exist (container has {len(stories)} stories).")
+            print(f"Error: Report {idx} does not exist (container has {len(stories)} reports).")
             sys.exit(1)
         indices = [idx]
 
     # Determine output mode
     do_save  = args.save_pdf or args.output or args.preview
-    do_print = not do_save  # print by default unless saving
 
     explicit_pdf = args.output  # str or None
 
@@ -478,11 +492,10 @@ def main():
         story = stories[story_idx - 1]
 
         make  = story.get("make", "unknown")
-        model = story.get("model", "")
-        title_short = (story.get("title") or f"story {story_idx}")[:60]
+        title_short = (story.get("title") or f"report {story_idx}")[:60]
 
         if not args.quiet:
-            print(f"  Building PDF — story {story_idx}/{len(stories)}  [{make}]  {title_short}")
+            print(f"  Building PDF — report {story_idx}/{len(stories)}  [{make}]  {title_short}", flush=True)
 
         html = _build_html(
             story=story,
@@ -491,10 +504,10 @@ def main():
             source_file=file_json,
         )
 
-        if args.verbose:
-            print(f"    Rendering HTML → PDF …")
+        if args.verbose and not args.quiet:
+            print("    Rendering HTML → PDF …")
 
-        pdf_bytes = _render_pdf(html)
+        pdf_bytes = _render_pdf(html, base_url=str(Path(file_json).resolve().parent))
 
         if not args.quiet:
             print(f"    PDF size: {len(pdf_bytes) / 1024:.1f} KB")
@@ -502,13 +515,17 @@ def main():
         if do_save or args.preview:
             # Determine output path
             if explicit_pdf and len(indices) == 1:
-                # Single story with explicit name: use it directly
+                # Single report with explicit name: use it directly
                 out_path = explicit_pdf
             else:
                 out_path = _default_pdf_path(file_json, story_idx, len(indices))
 
-            with open(out_path, "wb") as f:
-                f.write(pdf_bytes)
+            try:
+                with open(out_path, "wb") as f:
+                    f.write(pdf_bytes)
+            except OSError as e:
+                print(f"Error: Could not save PDF to {out_path}: {e}", file=sys.stderr)
+                sys.exit(1)
 
             if not args.quiet:
                 print(f"    Saved: {out_path}")
@@ -517,7 +534,7 @@ def main():
                 _open_pdf(out_path)
         else:
             # Print mode — use a temp file (lpr reads stdin)
-            _print_pdf(pdf_bytes, args.printer, args.verbose)
+            _print_pdf(pdf_bytes, args.printer, args.verbose and not args.quiet)
             if not args.quiet:
                 dest = f"printer '{args.printer}'" if args.printer else "default printer"
                 print(f"    Sent to {dest}")

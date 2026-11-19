@@ -20,6 +20,29 @@
 #   - Tested via tests/test_ask_match.py — keep entries matching their
 #     fixture queries at confidence ≥ 0.5 after edits.
 ---
+- id: export-report-pdf
+  question: "How do I export a report as PDF?"
+  aliases:
+    - "st-pdf"
+    - "save report PDF"
+    - "change PDF filename"
+    - "PDF Maker Matt Design metadata"
+  error_signatures: []
+  answer: |
+    Run `st-pdf file.json` to save report 1 as `file.pdf` in the current directory.
+    Choose a report from `st-ls` with `-s N`, and choose a filename with
+    `st-pdf -s 2 -o "My report.pdf" file.json`. Add `--preview` to open the PDF.
+    Existing output files are replaced; the JSON container is unchanged.
+
+    `st-pdf --all file.json` exports separate PDFs, named `file_reportN.pdf`
+    when there are multiple reports. Do not combine --all with --output.
+    In the app's Post menu, `d` exports the selected report; `D` prints it.
+    PDF properties credit Cross, Maker Matt Design, and https://crossai.dev.
+    No AI call is made. Run `st-man st-pdf` for formatting and setup guidance.
+  see_also:
+    - https://github.com/crossaicore/cross-st/wiki/st-pdf
+    - https://github.com/crossaicore/cross-st/wiki/st-print
+
 - id: update-saved-report
   question: "How do I update an existing report?"
   aliases:

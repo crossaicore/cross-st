@@ -46,3 +46,12 @@ def get_ai_make_model(ai_key: str):
 
 def get_app_tag():
     return "crossai.dev:"
+
+
+def get_pdf_branding():
+    """PDF export attribution; the software maker is not the report author."""
+    return {
+        "creator": "Cross — Maker Matt Design",
+        "subject": "Exported with Cross by Maker Matt Design — https://crossai.dev",
+        "website": "https://crossai.dev",
+    }

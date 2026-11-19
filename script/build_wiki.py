@@ -159,11 +159,17 @@ METADATA: dict[str, dict] = {
         "related": ["st-gen", "st-fact", "st-speak"],
         "dev": "Called automatically by `st-gen` unless `--no-prep` is supplied, `st-cross`, `st-fetch`, and `st-fix`. Writes to `story[]` in the container. TTS rendering (`--mp3`) uses `mmd_voice.py` and requires the TTS extras (`pipx install 'cross-st[tts]'`).",
     },
+    "st-pdf": {
+        "desc": "Export saved reports as PDF. Choose a filename with --output, open with --preview, or export every report with --all.",
+        "after": ["st-prep", "st-update"],
+        "related": ["st-ls", "st-print", "st-post"],
+        "dev": "Thin command over st-print's renderer. PDF metadata is supplied by mmd_branding.get_pdf_branding(). No AI calls or container changes.",
+    },
     "st-print": {
-        "desc": "Exports a story as a PDF, or sends it directly to a printer. Use `--save-pdf` to save the file without printing.",
+        "desc": "Print a report to a system printer. Use st-pdf for direct PDF export; --save-pdf remains supported.",
         "after": ["st-prep"],
-        "related": ["st-post", "st-edit"],
-        "dev": "Pipeline: Markdown → HTML (via `mistune`) → PDF (via `WeasyPrint`). `--preview` opens the PDF in the system viewer before printing.",
+        "related": ["st-pdf", "st-post", "st-edit"],
+        "dev": "Pipeline: Markdown → HTML (via `Python-Markdown`) → PDF (via `WeasyPrint`). `--preview` opens the PDF in the system viewer without printing.",
     },
     "st-read": {
         "desc": "Shows reading-level metrics for a story: word count, sentence count, average sentence length, and Flesch Reading Ease score.",
