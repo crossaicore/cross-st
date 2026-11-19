@@ -102,6 +102,85 @@ def test_append_is_a_complete_ordinary_report(cli, files, response, capsys):
     assert "-s 2 '" in output and 'not independently verified' in output
 
 
+@pytest.mark.parametrize('mode', ['different_default', 'model_changed', 'agent_removed', 'provider_changed'])
+def test_default_preserves_source_provider_and_model(cli, files, response, monkeypatch, capsys, mode):
+    path, _, original = files
+    specs = {'test-agent': ('test-provider', 'test-model'),
+             'other-agent': ('other-provider', 'other-model')}
+    if mode == 'model_changed':
+        specs['test-agent'] = ('test-provider', 'new-configured-model')
+    elif mode == 'agent_removed':
+        specs.pop('test-agent')
+        specs['replacement'] = ('test-provider', 'new-configured-model')
+    elif mode == 'provider_changed':
+        specs['test-agent'] = ('other-provider', 'other-model')
+        specs['replacement'] = ('test-provider', 'new-configured-model')
+    original['data'][0].update(data_id='source-raw', provider='test-provider')
+    original['story'][0]['source_data_id'] = 'source-raw'
+    path.write_text(json.dumps(original))
+    monkeypatch.setattr(engine, 'get_ai_list', lambda: list(specs))
+    monkeypatch.setattr(engine, 'get_ai_make', lambda agent: specs[agent][0])
+    monkeypatch.setattr(engine, 'get_ai_model', lambda agent: specs[agent][1])
+    monkeypatch.setattr(ai_handler, 'get_default_ai', lambda: 'other-agent')
+    cli.run(args(cli, files))
+    agent, _, options = response.calls[0]
+    assert agent == ('replacement' if mode in {'agent_removed', 'provider_changed'} else 'test-agent')
+    assert specs[agent][0] == 'test-provider'
+    assert options['model'] == 'test-model'
+    assert read(path)['data'][1]['provider'] == 'test-provider'
+    assert 'Source report author:' in capsys.readouterr().out
+
+
+def test_explicit_agent_deliberately_overrides_source_author(cli, files, response, monkeypatch):
+    specs = {'test-agent': ('test-provider', 'test-model'),
+             'chosen': ('chosen-provider', 'chosen-model')}
+    monkeypatch.setattr(engine, 'get_ai_list', lambda: list(specs))
+    monkeypatch.setattr(engine, 'get_ai_make', lambda agent: specs[agent][0])
+    monkeypatch.setattr(engine, 'get_ai_model', lambda agent: specs[agent][1])
+    cli.run(args(cli, files, '--agent', 'chosen'))
+    assert response.calls[0][0] == 'chosen'
+    assert response.calls[0][2]['model'] == 'chosen-model'
+
+
+@pytest.mark.parametrize('make', ['st-fetch', 'url'])
+def test_imported_source_uses_default_agent(cli, files, response, capsys, make):
+    path, _, original = files
+    for record in (original['data'][0], original['story'][0]):
+        record.update(make=make, model='example.test')
+    path.write_text(json.dumps(original))
+    cli.run(args(cli, files))
+    assert response.calls[0][0] == 'test-agent'
+    assert response.calls[0][2]['model'] == 'test-model'
+    assert 'Default agent for imported content' in capsys.readouterr().out
+
+
+@pytest.mark.parametrize('missing', ['provider_agent', 'model', 'author'])
+def test_unresolvable_author_fails_without_silent_switch(cli, files, response, missing):
+    path, _, original = files
+    original['data'][0]['data_id'] = 'source-raw'
+    original['story'][0]['source_data_id'] = 'source-raw'
+    if missing == 'provider_agent':
+        original['data'][0]['provider'] = 'unavailable-provider'
+    elif missing == 'model':
+        original['story'][0].pop('model')
+    else:
+        original['story'][0]['make'] = 'removed-author'
+    path.write_text(json.dumps(original))
+    before = path.read_bytes()
+    with pytest.raises(ValueError, match='--agent'):
+        cli.run(args(cli, files))
+    assert not response.calls
+    assert path.read_bytes() == before
+
+
+def test_source_provider_from_response_stamp_survives_removed_agent(files, response, monkeypatch):
+    _, _, container = files
+    container['story'][0].update(make='old-agent', source_data_id='source-raw')
+    container['data'][0].update(data_id='source-raw', gen_response={'_make': 'test-provider'})
+    assert engine.source_identity(container, 0) == {
+        'agent': 'test-agent', 'provider': 'test-provider', 'model': 'test-model'}
+
+
 @pytest.mark.parametrize('flags', [[], ['--iterate', '1']])
 def test_multiple_sources_require_selection_before_ai(cli, files, response, flags):
     path, _, original = files
@@ -147,6 +226,7 @@ def test_iterate_uses_selected_source_and_replaces_both_entries(cli, files, resp
     assert result['story'][1]['fact'] == []
     assert 'Target-only manual edit.' not in response.calls[-1][1]
     assert 'My human closing note.' in response.calls[-1][1]
+    assert response.calls[-1][2]['model'] == 'test-model'
 
 
 def test_same_source_and_target_captures_edited_source(cli, files, response):
@@ -160,6 +240,7 @@ def test_same_source_and_target_captures_edited_source(cli, files, response):
     assert 'Human table correction.' in response.calls[-1][1]
     assert read(path)['data'][1]['base_prompt'] == 'Original standing brief.'
     assert 'Update the supplied source' not in read(path)['data'][1]['base_prompt']
+    assert response.calls[-1][2]['model'] == 'returned-model'
 
 
 def test_nonupdate_target_refused_after_first_update(cli, files, response):

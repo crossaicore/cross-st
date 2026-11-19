@@ -12,9 +12,33 @@ st-update -s 2 --iterate 2 report.json    # use edited output 2 as its own sourc
 ## Select the source and output
 
 In `st` → Edit, `u` builds an update that creates a new report from the selected
-report. Capital `U` builds `st-update -s N --iterate N` with the selected agent,
-using the selected report as both source and replacement output. Both shortcuts
+report. Capital `U` builds `st-update -s N --iterate N`, using the selected report
+as both source and replacement output. Both shortcuts use the source report's
+saved provider and model, regardless of the menu's global agent selection, and
 follow the selection and first-update rules below.
+
+### Which AI writes the update?
+
+By default, the source report's provider and saved model write its update. For
+example, selecting a Perplexity `sonar-pro` report uses Perplexity `sonar-pro`,
+even when the menu is currently set to OpenAI or the Perplexity agent has since
+been configured with another model. The chosen agent, provider, and model are
+shown before the request editor opens.
+
+Cross uses a configured agent for that provider and explicitly requests the
+saved model. If the old agent was renamed or removed, another agent for the same
+provider can supply the credentials. If the provider or model cannot be
+identified, or no agent for that provider is configured, the update stops with
+guidance. An unavailable saved model fails without switching models.
+
+Use `--agent NAME` to deliberately choose another author and its currently
+configured model. Imported content from `st-fetch` has no AI author, so it uses
+the configured default agent unless you supply `--agent`.
+
+When source and iteration target differ, the **source** determines the default
+provider/model; the target determines the saved request and replacement slot.
+
+### Source and iteration indices
 
 `-s N` selects the existing source report. It is required when the container has multiple reports. Run `st-ls report.json` to inspect the current indices. A normal update appends a raw generation entry and prepared report; Cross prints the assigned output index.
 
@@ -67,7 +91,7 @@ Review happens after the successful save. There is no separate approval command.
 | `--iterate N` | Replace an existing update output and its raw entry |
 | `--prompt FILE` | Read update instructions instead of opening the editor |
 | `--evidence FILE` | Include supplied local evidence; repeatable |
-| `--agent NAME` | Use a configured [agent](Agents) |
+| `--agent NAME` | Override the source provider/model with this configured [agent](Agents) and its current model |
 | `--update-summary` | Concise summary of the generated changes; default |
 | `--update-details` | Detailed notes and exact Markdown diff |
 | `--show-summary` | Redisplay a saved summary without generation |

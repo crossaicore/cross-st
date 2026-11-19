@@ -24,8 +24,10 @@ Press a letter to enter a submenu, then a second letter to build the command. Pr
 ## Keyboard shortcuts
 
 In the **Edit** menu, `u` updates the selected report into a new report. Capital
-`U` iterates on the selected report using `-s N --iterate N` and the selected
-agent. It follows [st-update's iteration rules](st-update): the first update
+`U` iterates on the selected report using `-s N --iterate N`. Both use the source
+report's saved provider and model, independently of the menu's global agent
+selection. Add `--agent NAME` to the command to choose a different author.
+They follow [st-update's iteration rules](st-update): the first update
 ignores `--iterate` and appends; later iterations require a saved update request.
 Press `RETURN` to run the constructed command.
 

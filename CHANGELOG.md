@@ -35,6 +35,9 @@ Cross uses Calendar Versioning (`YYYY.M.R`).
 - Three worked update examples covering human edits, new observations, and selected feedback.
 
 ### Changed
+- `st-update` defaults to the source report's saved provider and model. Edit-menu
+  `u` and `U` inherit that author instead of forcing the globally selected agent;
+  explicit `--agent` selects a different author and its configured model.
 - Report scoring, chart labels, and listings keep separate outputs from the same
   provider/model distinct and use each report's authored requirements.
 - Raw-generation IDs explicitly associate prepared reports with their source

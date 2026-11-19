@@ -232,7 +232,7 @@ def test_menu_update_keeps_selected_report(report_file, monkeypatch, key, iterat
     mod.fact_sel = 1
     mod.ai = 'chosen-agent'
     mod.execute_menu('Edit', key)
-    assert mod.cmd == f'st-update --agent chosen-agent -s 2{iterate} {report_file}'
+    assert mod.cmd == f'st-update -s 2{iterate} {report_file}'
     mod.refresh_state()
     assert mod.story_sel == 2
     assert 'st-update' in mod.POST_CMD_REFRESH and 'st-edit' in mod.POST_CMD_REFRESH

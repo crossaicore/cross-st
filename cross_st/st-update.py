@@ -7,6 +7,11 @@ It is required when the container has multiple reports. With only one report,
 that report is selected automatically. A normal update appends a new output;
 Cross assigns and prints its index.
 
+By default, updates use the source report's saved provider and model, even if
+that agent's configured model has since changed. Use --agent NAME to deliberately
+choose a different author and its configured model. Imported content without an
+AI author uses the configured default agent.
+
 --iterate N reopens the update request associated with existing OUTPUT N and
 replaces that output and its raw generation record. Source and output may be
 the same report. Old entries remain untouched until both replacements are ready
@@ -71,7 +76,7 @@ def parser_for_cli():
     parser.add_argument('--iterate', type=int, metavar='N', help='Existing output to regenerate; never a future index')
     parser.add_argument('--prompt', type=Path, metavar='FILE', help='Read update instructions from a UTF-8 file instead of the editor')
     parser.add_argument('--evidence', type=Path, metavar='FILE', action='append', default=[], help='Supplied UTF-8 evidence; repeatable')
-    add_agent_arg(parser)
+    add_agent_arg(parser, help='Override the source author with this agent and its configured model; default: source provider/model')
     views = parser.add_mutually_exclusive_group()
     views.add_argument('--update-summary', action='store_true', help='Concise generated-change summary (default)')
     views.add_argument('--update-details', action='store_true', help='Detailed change notes and exact Markdown diff')
@@ -148,10 +153,21 @@ def run(args):
     if not args.prompt and not sys.stdin.isatty():
         raise ValueError('Non-interactive updates require --prompt FILE with the update instructions.')
     from ai_handler import get_default_ai, check_api_key
-    agent = args.agent or get_default_ai()
-    engine.identity(agent)
+    inherited = False
+    if args.agent:
+        spec = engine.identity(args.agent)
+    else:
+        spec = engine.source_identity(container, source)
+        inherited = spec is not None
+        if spec is None:
+            spec = engine.identity(get_default_ai())
+    agent = spec['agent']
     if not check_api_key(agent):
         raise ValueError(f'No usable credentials for agent {agent}; configure it with st-admin.')
+    if not args.quiet:
+        selection = ('Source report author' if inherited else
+                     'Selected agent' if args.agent else 'Default agent for imported content')
+        print(f"  {selection}: {agent} ({spec['provider']} / {spec['model']})", flush=True)
     draft = None
     if args.prompt:
         request = args.prompt.read_text(encoding='utf-8')
@@ -170,7 +186,8 @@ def run(args):
         if store.load_snapshot(path)[1] != fingerprint:
             raise ValueError('Container changed while editing; reload it before updating.')
         raw, report, summary = engine.generate(inputs, container['story'][source], agent,
-                                               use_cache=not args.no_cache, quiet=args.quiet, verbose=args.verbose)
+                                               model=spec['model'], use_cache=not args.no_cache,
+                                               quiet=args.quiet, verbose=args.verbose)
         updated, index = store.commit_update(path, fingerprint, source, raw, report, request,
                                              summary=summary, target_index=target)
     except (Exception, KeyboardInterrupt):

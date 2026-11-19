@@ -9,7 +9,7 @@ import re
 import time
 from pathlib import Path
 
-from ai_handler import (get_ai_list, get_ai_make, get_ai_model, get_content_auto,
+from ai_handler import (get_ai_list, get_ai_make, get_ai_make_list, get_ai_model, get_content_auto,
                         get_usage, process_prompt)
 
 SYSTEM = (
@@ -52,6 +52,40 @@ def identity(agent):
     if agent not in get_ai_list():
         raise ValueError(f'Unknown or unavailable agent: {agent}. Configure it with st-admin.')
     return {'agent': agent, 'provider': get_ai_make(agent), 'model': get_ai_model(agent)}
+
+
+def source_identity(container, source_index):
+    """Resolve the saved author and pin its recorded model, not today's default."""
+    from _report_store import raw_index
+    from ai_url import AI_MAKE as FETCH_MAKE
+    source = container['story'][source_index]
+    author = source.get('make')
+    if author in {FETCH_MAKE, 'url'}:
+        return None  # Imported content has no AI author to inherit.
+    model = source.get('model')
+    raw_pos = raw_index(container, source_index)
+    raw = container['data'][raw_pos] if raw_pos is not None else {}
+    response = raw.get('gen_response')
+    provider = (raw.get('provider') or source.get('provider') or
+                (response.get('_make') if isinstance(response, dict) else None))
+    agents = get_ai_list()
+    if not provider:
+        if author in get_ai_make_list():
+            provider = author  # Legacy reports recorded the provider directly.
+        elif author in agents:
+            provider = get_ai_make(author)
+    if not provider or not isinstance(model, str) or not model.strip():
+        raise ValueError('Cannot determine the source report\'s provider and model. '
+                         'Choose an author explicitly with --agent NAME.')
+    candidates = [name for name in agents if get_ai_make(name) == provider]
+    if not candidates:
+        raise ValueError(f'No configured agent for source provider {provider} (model {model}). '
+                         'Configure one with st-admin, or choose a different author with --agent NAME.')
+    if author in candidates:
+        agent = author
+    else:
+        agent = next((name for name in candidates if get_ai_model(name) == model), candidates[0])
+    return {'agent': agent, 'provider': provider, 'model': model}
 
 
 def context_for(container, source_index, request, evidence=()):
@@ -147,12 +181,14 @@ def prepare_report(markdown, source, agent, model, base_prompt, request):
     return report
 
 
-def generate(inputs, source, agent, *, use_cache=True, quiet=False, verbose=False):
+def generate(inputs, source, agent, *, model=None, use_cache=True, quiet=False, verbose=False):
     spec = identity(agent)
+    if model is not None:
+        spec['model'] = model
     prompt = 'Update the supplied source using this request and input material:\n' + json.dumps(inputs, ensure_ascii=False)
     check_size(SYSTEM + prompt)
     if not quiet:
-        print(f'  Generating updated report with {agent}…', flush=True)
+        print(f"  Generating updated report with {agent} ({spec['provider']} / {spec['model']})…", flush=True)
     started = time.time()
     response = process_prompt(agent, prompt, model=spec['model'], system=SYSTEM,
                               use_cache=use_cache, verbose=verbose)
