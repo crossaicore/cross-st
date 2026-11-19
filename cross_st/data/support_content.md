@@ -1,4 +1,4 @@
-# corpus_version: 2026.10.0
+# corpus_version: 2026.11.0
 
 # Cross-st Help Content
 
@@ -7067,6 +7067,10 @@ Cross uses Calendar Versioning (`YYYY.M.R`).
 
 ## [Unreleased]
 
+---
+
+## [2026.11.0] — 2026-11-18
+
 ### Fixed
 - `st-fetch --url` requests Markdown and follows advertised Markdown versions,
   preserving the complete response. HTML fallback now retains links, images,
@@ -7098,8 +7102,8 @@ Cross uses Calendar Versioning (`YYYY.M.R`).
 - Three worked update examples covering human edits, new observations, and selected feedback.
 
 ### Changed
-- `st-pdf` exports one selected report or fact-check per call; its `--all` option
-  was removed. Use `-s N -f M` for a saved fact-check (also supported by `st-print`).
+- `st-pdf` exports one selected report or fact-check per call. Use `-s N -f M`
+  for a saved fact-check (also supported by `st-print`).
 - Multiple PDF exports use `_reportN.pdf` filenames. `st-print --all --output`
   now reports the conflicting options instead of silently ignoring the filename.
 - `st-update` defaults to the source report's saved provider and model. Edit-menu

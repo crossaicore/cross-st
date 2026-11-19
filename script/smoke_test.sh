@@ -70,7 +70,7 @@ echo "  2. Entry points"
 ENTRY_POINTS=(
     st st-admin st-analyze st-ask st-bang st-cat st-cross st-domain st-edit
     st-fact st-fetch st-find st-fix st-gen st-heatmap st-ls st-man
-    st-merge st-new st-plot st-post st-prep st-print st-read st-rm
+    st-merge st-new st-pdf st-plot st-post st-prep st-print st-read st-rm
     st-speak st-speed st-stones st-update st-verdict st-voice
 )
 MISSING=()
@@ -86,7 +86,7 @@ fi
 # ── 3. Core --help flags ──────────────────────────────────────────────────────
 echo
 echo "  3. --help flags (no API keys needed)"
-for cmd in st-admin st-new st-ls st-find st-man st-stones; do
+for cmd in st-admin st-new st-ls st-find st-man st-stones st-pdf; do
     if run "$cmd" --help &>/dev/null; then
         _ok "${cmd} --help"
     else
