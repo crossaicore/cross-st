@@ -4,7 +4,7 @@
 
 List stories, data, and fact-checks inside a `.json` container.
 Default shows the story table — a quick overview of all stories and their
-fact-check scores, much like the Linux `ls` command gives a directory listing.
+composite quality scores, much like the Linux `ls` command gives a directory listing.
 Use `-a` / `--all` to show every section, or combine flags as needed.
 
 Run after:  st-gen   (generated your first story)
@@ -17,7 +17,7 @@ Run before: st-print  (preview or print a story)
             st-post   (publish a story)
 
 ```
-st-ls subject.json              # default: story table (titles, scores, flags)
+st-ls subject.json              # default: report table (titles, quality, flags)
 st-ls -a subject.json           # show all: data, stories, fact-checks, claims
 st-ls --data subject.json       # raw API data items only
 st-ls --fact subject.json       # fact-check summary table
@@ -32,9 +32,13 @@ st-ls --fact -C subject.json    # fact-check table + claims
 | S      | Story index (use with -s N in other commands) |
 | Flag   | Story origin: blank = original AI output; [fix:patch/best/synth] = improved by st-fix; [merge] = synthesized by st-merge |
 | Segs   | Number of fact-checkable segments extracted from the story |
-| Score  | Composite "best author" score (VRD-10) — coverage + completeness + accuracy + calibration; range roughly [-1, +1]. A `*` suffix marks an author excluded from best-author selection (incomplete: missing data, low word/segment/claim count, or truncated). |
+| Quality | Composite "best author" score (VRD-10) — coverage + completeness + accuracy + calibration; range roughly [-1, +1]. A `*` suffix marks an author excluded from best-author selection (incomplete: missing data, low word/segment/claim count, or truncated). |
 
-Run `st-fact` or `st-cross` to populate the Score column.
+Quality is calculated from the available report and prompt data, even before
+fact-checking. Coverage and completeness can contribute immediately; without
+fact-checks, accuracy is 0 and calibration defaults to 0.5. Run `st-fact` or
+`st-cross` to add fact-check evidence to the calculation. A displayed Quality value
+alone does not mean the report has been fact-checked.
 
 ## See also
 
@@ -83,7 +87,7 @@ def main():
     parser.add_argument('-q', '--quiet', action='store_true',
                         help='Enable minimal output')
     parser.add_argument('--score-weights', type=str, default=None, metavar='SPEC',
-                        help=('Override composite-score weights, e.g. '
+                        help=('Override composite quality-score weights, e.g. '
                               '"cov=0.25,comp=0.25,acc=0.40,cal=0.10". '
                               'Keys: cov, comp, acc, cal (or full names).'))
 
@@ -241,7 +245,7 @@ def main():
             print(f"{newline}STORY")
             newline = "\n"
             print(tabulate(story_data,
-                           headers=["S", "Make", "Model", "Flag", "Segs", "Score", "Title"],
+                           headers=["S", "Make", "Model", "Flag", "Segs", "Quality", "Title"],
                            tablefmt="github"))
             if any_excluded:
                 print("  * = author excluded from best-author selection (incomplete)")

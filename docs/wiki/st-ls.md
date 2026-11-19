@@ -1,11 +1,11 @@
 # st-ls — List the contents of a story container
 
-Lists the stories and fact-checks stored inside a `.json` container — titles, AI authors, scores, and timestamps.
+Lists the stories and fact-checks stored inside a `.json` container — titles, AI authors, composite quality scores, and fact-check results.
 
 ## Examples
 
 ```bash
-st-ls subject.json              # default: story table (titles, scores, flags)
+st-ls subject.json              # default: report table (titles, quality, flags)
 st-ls -a subject.json           # show all: data, stories, fact-checks, claims
 st-ls --data subject.json       # raw API data items only
 st-ls --fact subject.json       # fact-check summary table
@@ -18,7 +18,7 @@ st-ls --fact -C subject.json    # fact-check table + claims
 | Option | Description |
 |--------|-------------|
 | `-d`, `--data` | Display raw API data items |
-| `-s`, `--story` | Display the stories section (titles, scores, flags) |
+| `-s`, `--story` | Display the report section (titles, quality, flags) |
 | `-f`, `--fact` | Display the fact-check summary table |
 | `-C`, `--claims` | Display the cross-AI claims comparison table (segment × AI verdict) |
 | `-c N`, `--clip N` | Clip displayed title length to N characters (default: 60) |
@@ -34,7 +34,7 @@ st-ls --fact -C subject.json    # fact-check table + claims
 
 List stories, data, and fact-checks inside a `.json` container.
 Default shows the story table — a quick overview of all stories and their
-fact-check scores, much like the Linux `ls` command gives a directory listing.
+composite quality scores, much like the Linux `ls` command gives a directory listing.
 Use `-a` / `--all` to show every section, or combine flags as needed.
 
 Run after:  st-gen   (generated your first story)
@@ -54,9 +54,13 @@ Run before: st-print  (preview or print a story)
 | S      | Story index (use with -s N in other commands) |
 | Flag   | Story origin: blank = original AI output; [fix:patch/best/synth] = improved by st-fix; [merge] = synthesized by st-merge |
 | Segs   | Number of fact-checkable segments extracted from the story |
-| Score  | Average fact-check score across all evaluators (higher = more accurate; max 200 for 10 claims at 20 pts each) |
+| Quality | Composite score combining coverage, completeness, accuracy, and calibration; range roughly [-1, +1]. A `*` suffix marks a report excluded from best-author selection because it is incomplete. |
 
-Run `st-fact` or `st-cross` to populate the Score column.
+Quality is calculated from the available report and prompt data, even before
+fact-checking. Coverage and completeness can contribute immediately; without
+fact-checks, accuracy is 0 and calibration defaults to 0.5. Run `st-fact` or
+`st-cross` to add fact-check evidence to the calculation. A displayed Quality value
+alone does not mean the report has been fact-checked.
 
 ## See also
 
@@ -67,4 +71,4 @@ Run `st-fact` or `st-cross` to populate the Score column.
 
 ## Additional current options
 
-- `--score-weights`: Override composite-score weights, e.g. "cov=0.25,comp=0.25,acc=0.40,cal=0.10". Keys: cov, comp, acc, cal (or full names).
+- `--score-weights`: Override composite quality-score weights, e.g. "cov=0.25,comp=0.25,acc=0.40,cal=0.10". Keys: cov, comp, acc, cal (or full names).
