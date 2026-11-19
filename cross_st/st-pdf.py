@@ -14,7 +14,15 @@ st-pdf -s 2 -f 1 subject.json               # fact-check 1 for report 2
 st-pdf --preview subject.json               # save and open in PDF viewer
 ```
 
-Options: -s/--story N  -f/--fact N  -o/--output FILE.pdf  --preview  -v  -q  -h
+Options:
+  -s N, --story N       Select report N (1-based; default: 1).
+  -f N, --fact N        Export fact-check N for the selected report (lowercase f).
+  -o FILE, --output FILE
+                       Choose the output PDF filename or path.
+  --preview            Save and open the PDF in your viewer.
+  -v, --verbose        Show rendering details.
+  -q, --quiet          Suppress informational output.
+  -h, --help           Show command help.
 
 Files are saved in the current directory unless --output includes a directory.
 Existing output files are replaced. A missing .pdf suffix is added; other
